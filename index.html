@@ -1,0 +1,1128 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Smart Farm IoT-125 | Realtime Dashboard</title>
+<meta name="description" content="แดชบอร์ดโรงเรือนอัจฉริยะแบบเรียลไทม์ ESP32 + ESPHome + Firebase Realtime Database (iot-125)">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%23137a3a'/%3E%3Cpath d='M17 46C17 30 29 18 48 16c-1 19-13 30-29 30' fill='%23fff'/%3E%3Cpath d='M15 50c7-9 14-15 23-21' stroke='%23137a3a' stroke-width='3.5' stroke-linecap='round' fill='none'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.js"></script>
+<script>window.Chart || document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"><\/script>');</script>
+<style>
+:root{
+  color-scheme: light;
+  --page:#f2f2ee; --surface:#fcfcfb; --surface-2:#f4f4f0; --surface-3:#ebebe5;
+  --text-1:#0b0b0b; --text-2:#52514e; --muted:#898781;
+  --grid:#e6e5df; --axis:#c3c2b7; --border:rgba(11,11,11,.10); --border-solid:#dddcd5;
+  --shadow:0 1px 2px rgba(11,11,11,.04), 0 10px 30px -12px rgba(11,11,11,.10);
+  --brand:#137a3a; --brand-ink:#ffffff; --brand-soft:rgba(19,122,58,.10);
+  --good:#0ca30c; --warning:#fab219; --serious:#ec835a; --critical:#d03b3b; --info:#2a78d6;
+  --s-temp:#eb6834; --s-hum:#1baf7a; --s-soil:#008300; --s-light:#eda100;
+  --s-co2:#4a3aa7; --s-ph:#e87ba4; --s-water:#2a78d6;
+  --radius:18px;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme: dark;
+    --page:#0d0d0d; --surface:#1a1a19; --surface-2:#222220; --surface-3:#2a2a28;
+    --text-1:#ffffff; --text-2:#c3c2b7; --muted:#898781;
+    --grid:#2c2c2a; --axis:#383835; --border:rgba(255,255,255,.10); --border-solid:#333331;
+    --shadow:none;
+    --brand:#3fbf6f; --brand-ink:#06210f; --brand-soft:rgba(63,191,111,.14);
+    --info:#3987e5;
+    --s-temp:#d95926; --s-hum:#199e70; --s-soil:#008300; --s-light:#c98500;
+    --s-co2:#9085e9; --s-ph:#d55181; --s-water:#3987e5;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme: dark;
+  --page:#0d0d0d; --surface:#1a1a19; --surface-2:#222220; --surface-3:#2a2a28;
+  --text-1:#ffffff; --text-2:#c3c2b7; --muted:#898781;
+  --grid:#2c2c2a; --axis:#383835; --border:rgba(255,255,255,.10); --border-solid:#333331;
+  --shadow:none;
+  --brand:#3fbf6f; --brand-ink:#06210f; --brand-soft:rgba(63,191,111,.14);
+  --info:#3987e5;
+  --s-temp:#d95926; --s-hum:#199e70; --s-soil:#008300; --s-light:#c98500;
+  --s-co2:#9085e9; --s-ph:#d55181; --s-water:#3987e5;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{
+  font-family:"IBM Plex Sans Thai",system-ui,-apple-system,"Segoe UI",sans-serif;
+  background:var(--page); color:var(--text-1); font-size:15px; line-height:1.5;
+  -webkit-font-smoothing:antialiased; overflow-x:hidden;
+}
+button,input,select{font:inherit;color:inherit}
+.wrap{max-width:1400px;margin:0 auto;padding:18px 16px 40px}
+@media(min-width:768px){.wrap{padding:24px 28px 48px}}
+svg.i{width:18px;height:18px;flex:none}
+
+/* ---------- header ---------- */
+.top{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:14px 20px;margin-bottom:18px}
+.brand{display:flex;align-items:center;gap:14px;min-width:0}
+.logo{width:48px;height:48px;border-radius:15px;background:var(--brand);display:grid;place-items:center;flex:none;color:var(--brand-ink)}
+.logo svg{width:30px;height:30px}
+.brand h1{font-size:clamp(19px,2.4vw,24px);line-height:1.2;margin:0;font-weight:700;letter-spacing:-.01em}
+.brand p{margin:3px 0 0;color:var(--text-2);font-size:13.5px}
+.hdr-right{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.pill{display:inline-flex;align-items:center;gap:8px;min-height:36px;padding:4px 14px;border-radius:999px;background:var(--surface);border:1px solid var(--border);font-size:13px;color:var(--text-2);white-space:nowrap}
+.pill b{color:var(--text-1);font-weight:600}
+.dot{width:9px;height:9px;border-radius:50%;background:var(--muted);flex:none}
+.dot.live{background:var(--good);animation:ping 1.8s infinite}
+.dot.late{background:var(--warning)}
+.dot.off{background:var(--critical)}
+@keyframes ping{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--good) 55%,transparent)}70%{box-shadow:0 0 0 8px transparent}100%{box-shadow:0 0 0 0 transparent}}
+.icon-btn{width:36px;height:36px;border-radius:999px;border:1px solid var(--border);background:var(--surface);display:grid;place-items:center;cursor:pointer;color:var(--text-1)}
+.icon-btn:hover{background:var(--surface-2)}
+.icon-btn:focus-visible,.seg button:focus-visible,.btn:focus-visible,.switch input:focus-visible+span{outline:2px solid var(--info);outline-offset:2px}
+
+.banner{display:none;align-items:flex-start;gap:10px;padding:12px 16px;border-radius:14px;margin-bottom:14px;font-size:14px;border:1px solid var(--border);background:var(--surface)}
+.banner.show{display:flex}
+.banner svg{margin-top:2px}
+.banner.warn svg{color:var(--warning)} .banner.err svg{color:var(--critical)} .banner.demo svg{color:var(--info)}
+
+/* ---------- cards & grids ---------- */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px;box-shadow:var(--shadow);min-width:0}
+.card-hd{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:14px}
+.card h2{font-size:15.5px;margin:0;font-weight:600;line-height:1.35}
+.card .sub{color:var(--text-2);font-size:12.5px;margin:2px 0 0}
+.grid-top{display:grid;gap:16px;grid-template-columns:1fr;margin-bottom:16px}
+@media(min-width:780px){.grid-top{grid-template-columns:1fr 1fr}.grid-top>.card:first-child{grid-column:1/-1}}
+@media(min-width:1200px){.grid-top{grid-template-columns:1.15fr 1fr 1fr}.grid-top>.card:first-child{grid-column:auto}}
+.sec-title{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin:22px 2px 10px}
+.sec-title h3{margin:0;font-size:14px;font-weight:600;color:var(--text-2);letter-spacing:.01em}
+.sec-title span{font-size:12.5px;color:var(--muted)}
+
+/* ---------- status chip ---------- */
+.chip{--chip:var(--muted);display:inline-flex;align-items:center;gap:5px;padding:2px 10px 2px 6px;border-radius:999px;font-size:12px;font-weight:600;white-space:nowrap;background:color-mix(in srgb,var(--chip) 15%,transparent);color:var(--text-1);line-height:1.6}
+.chip svg{width:14px;height:14px;flex:none;color:var(--chip)}
+.st-good{--chip:var(--good)} .st-warning{--chip:var(--warning)} .st-serious{--chip:var(--serious)}
+.st-critical{--chip:var(--critical)} .st-night,.st-na{--chip:var(--muted)} .st-info{--chip:var(--info)}
+
+/* ---------- health ---------- */
+.health{display:grid;grid-template-columns:auto 1fr;gap:6px 18px;align-items:center}
+.hero{font-size:60px;font-weight:600;line-height:1;letter-spacing:-.03em}
+.hero small{font-size:18px;color:var(--muted);font-weight:500;letter-spacing:0;margin-left:2px}
+.meter{grid-column:1/-1;height:8px;border-radius:99px;background:var(--surface-3);overflow:hidden;margin:10px 0 2px}
+.meter i{display:block;height:100%;width:0;border-radius:99px;background:var(--good);transition:width .6s ease,background .3s}
+.recs{list-style:none;margin:14px 0 0;padding:0;display:flex;flex-direction:column;gap:8px}
+.recs li{display:flex;gap:10px;align-items:flex-start;font-size:13.5px;line-height:1.45;padding:9px 11px;border-radius:12px;background:var(--surface-2)}
+.recs li svg{width:17px;height:17px;flex:none;margin-top:1px;color:var(--chip)}
+.recs-title{font-size:12.5px;color:var(--muted);margin:16px 0 0;font-weight:500}
+
+/* ---------- pump control ---------- */
+.pump-state{display:flex;align-items:center;gap:14px;padding:12px;border-radius:14px;background:var(--surface-2);margin-bottom:14px}
+.pump-ico{width:54px;height:54px;flex:none;border-radius:14px;display:grid;place-items:center;background:var(--surface);border:1px solid var(--border);color:var(--muted)}
+.pump-ico svg{width:34px;height:34px}
+.pump-on .pump-ico{color:var(--s-water);border-color:color-mix(in srgb,var(--s-water) 40%,transparent)}
+.pump-on .drop{animation:drip 1s infinite}
+.pump-on .drop.d2{animation-delay:.33s} .pump-on .drop.d3{animation-delay:.66s}
+.drop{opacity:0}
+@keyframes drip{0%{opacity:0;transform:translateY(-3px)}30%{opacity:1}100%{opacity:0;transform:translateY(7px)}}
+.pump-txt b{display:block;font-size:16px;font-weight:600}
+.pump-txt span{font-size:12.5px;color:var(--text-2)}
+.ctl-row{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:12px 0}
+.ctl-row label{font-size:13.5px;color:var(--text-2)}
+.seg{display:inline-flex;padding:3px;border-radius:12px;background:var(--surface-3);gap:2px}
+.seg button{border:0;background:transparent;padding:6px 13px;border-radius:9px;font-size:13px;font-weight:500;color:var(--text-2);cursor:pointer;white-space:nowrap}
+.seg button[aria-pressed="true"]{background:var(--surface);color:var(--text-1);box-shadow:0 1px 3px rgba(0,0,0,.12);font-weight:600}
+.switch{position:relative;display:inline-flex;align-items:center;gap:10px;cursor:pointer;font-size:13.5px}
+.switch input{position:absolute;opacity:0;width:1px;height:1px}
+.switch span{width:46px;height:26px;border-radius:99px;background:var(--surface-3);position:relative;transition:background .2s;flex:none;border:1px solid var(--border)}
+.switch span::after{content:"";position:absolute;top:2px;left:2px;width:20px;height:20px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.3);transition:transform .2s}
+.switch input:checked+span{background:var(--s-water)}
+.switch input:checked+span::after{transform:translateX(20px)}
+.switch input:disabled+span{opacity:.45}
+.switch.disabled{cursor:not-allowed;color:var(--muted)}
+.rng{display:grid;grid-template-columns:1fr auto;gap:2px 10px;align-items:center;margin:10px 0}
+.rng label{font-size:13px;color:var(--text-2)}
+.rng output{font-weight:600;font-size:14px;min-width:44px;text-align:right}
+.rng input{grid-column:1/-1;width:100%;accent-color:var(--s-soil)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;border:1px solid var(--border);background:var(--surface);border-radius:11px;padding:8px 14px;font-size:13.5px;font-weight:500;cursor:pointer;white-space:nowrap}
+.btn:hover{background:var(--surface-2)}
+.btn.primary{background:var(--brand);color:var(--brand-ink);border-color:transparent}
+.btn.primary:hover{filter:brightness(1.07)}
+.btn[disabled]{opacity:.5;cursor:not-allowed}
+.sync{display:flex;gap:8px;align-items:center;font-size:12.5px;color:var(--text-2);margin-top:12px;min-height:20px}
+.sync svg{width:16px;height:16px;color:var(--chip)}
+.mini-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:14px}
+.mini-stats div{background:var(--surface-2);border-radius:12px;padding:8px 10px}
+.mini-stats b{display:block;font-size:16px;font-weight:600}
+.mini-stats span{font-size:11.5px;color:var(--muted)}
+
+/* ---------- device ---------- */
+.dev-list{display:grid;grid-template-columns:auto 1fr;gap:9px 14px;margin:0;font-size:13.5px}
+.dev-list dt{color:var(--text-2)}
+.dev-list dd{margin:0;text-align:right;font-weight:500;min-width:0;overflow-wrap:anywhere}
+.bars{display:inline-flex;gap:2px;align-items:flex-end;height:14px;vertical-align:-2px;margin-right:6px}
+.bars i{width:4px;border-radius:1px;background:var(--surface-3)}
+.bars i:nth-child(1){height:5px}.bars i:nth-child(2){height:8px}.bars i:nth-child(3){height:11px}.bars i:nth-child(4){height:14px}
+.bars i.on{background:var(--text-1)}
+.derived{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:16px}
+.derived .d{background:var(--surface-2);border-radius:12px;padding:10px 11px;min-width:0}
+.derived .d span{font-size:11.5px;color:var(--muted);display:block}
+.derived .d b{font-size:19px;font-weight:600;display:block;line-height:1.3}
+.derived .d small{font-size:11.5px;color:var(--text-2)}
+.derived .chip{margin-top:4px;font-size:11px;padding:1px 8px 1px 5px}
+
+/* ---------- KPI tiles ---------- */
+.kpis{display:grid;gap:12px;grid-template-columns:repeat(auto-fill,minmax(178px,1fr))}
+.kpi{padding:14px 15px 12px;display:flex;flex-direction:column;gap:5px;transition:border-color .5s}
+.kpi.flash{border-color:color-mix(in srgb,var(--c) 55%,transparent)}
+.kpi-hd{display:flex;justify-content:space-between;align-items:center;gap:6px;min-height:24px}
+.kpi-name{display:flex;align-items:center;gap:7px;font-size:13px;color:var(--text-2);font-weight:500;min-width:0}
+.kpi-name i{width:10px;height:10px;border-radius:3px;background:var(--c);flex:none}
+.kpi-name em{font-style:normal;line-height:1.3}
+.kpi-row{display:flex;flex-direction:column;align-items:flex-start;gap:4px}
+.kpi-val{font-size:31px;font-weight:600;letter-spacing:-.02em;line-height:1.15;margin-top:2px}
+.kpi-val small{font-size:14px;color:var(--text-2);font-weight:500;margin-left:4px;letter-spacing:0}
+.spark{width:100%;height:38px;display:block;overflow:visible}
+.kpi-ft{font-size:11.5px;color:var(--muted);display:flex;justify-content:space-between;gap:4px 8px;flex-wrap:wrap}
+@media(max-width:520px){.kpis{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.kpi{padding:12px}.kpi-val{font-size:26px}.kpi-ft .rg{display:none}}
+
+/* ---------- filters ---------- */
+.filters{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;margin:22px 0 12px}
+.filters .left{display:flex;flex-wrap:wrap;align-items:center;gap:10px}
+.filters .lbl{font-size:13px;color:var(--text-2)}
+.filters .right{display:flex;flex-wrap:wrap;gap:8px}
+
+/* ---------- charts ---------- */
+.legend{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:12.5px;color:var(--text-2);margin:-4px 0 10px}
+.legend span{display:inline-flex;align-items:center;gap:7px}
+.key-line{width:16px;height:2px;border-radius:2px;background:var(--c);display:inline-block}
+.key-rect{width:14px;height:10px;border-radius:2px;background:color-mix(in srgb,var(--c) 22%,transparent);display:inline-block}
+.chart-box{position:relative;height:290px;width:100%}
+.chart-box.sm{height:190px}
+.multi{display:grid;gap:16px;grid-template-columns:repeat(auto-fill,minmax(min(100%,330px),1fr));margin-top:16px}
+.multi .card-hd{margin-bottom:8px}
+.cur{font-size:13px;color:var(--text-2);white-space:nowrap}
+.cur b{color:var(--text-1);font-size:17px;font-weight:600}
+
+/* ---------- events / json / table ---------- */
+.grid-2{display:grid;gap:16px;grid-template-columns:1fr;margin-top:16px}
+@media(min-width:960px){.grid-2{grid-template-columns:1.1fr .9fr}}
+.events{list-style:none;margin:0;padding:0;max-height:330px;overflow:auto;display:flex;flex-direction:column}
+.events li{display:grid;grid-template-columns:auto auto 1fr;gap:10px;align-items:start;padding:9px 2px;border-bottom:1px solid var(--grid);font-size:13.5px}
+.events li:last-child{border-bottom:0}
+.events time{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums;padding-top:1px}
+.events svg{width:16px;height:16px;color:var(--chip);margin-top:2px}
+.empty{color:var(--muted);font-size:13.5px;padding:16px 0;text-align:center}
+pre.json{margin:0;background:var(--surface-2);border-radius:12px;padding:14px;font:12.5px/1.55 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;max-height:330px;overflow:auto;white-space:pre-wrap;word-break:break-word;color:var(--text-1)}
+.tbl-wrap{overflow-x:auto;margin:0 -4px}
+table.tbl{width:100%;border-collapse:collapse;font-size:13px;font-variant-numeric:tabular-nums;min-width:760px}
+.tbl th{color:var(--muted);font-weight:500;text-align:right;padding:8px 10px;border-bottom:1px solid var(--border-solid);white-space:nowrap;font-size:12px}
+.tbl td{padding:8px 10px;border-bottom:1px solid var(--grid);text-align:right;white-space:nowrap}
+.tbl th:first-child,.tbl td:first-child{text-align:left}
+.tbl tr:last-child td{border-bottom:0}
+.tag{display:inline-block;padding:1px 8px;border-radius:99px;font-size:11.5px;font-weight:600;background:var(--surface-3);color:var(--text-2)}
+.tag.on{background:color-mix(in srgb,var(--s-water) 18%,transparent);color:var(--text-1)}
+
+/* ---------- about ---------- */
+.flow{display:flex;flex-wrap:wrap;align-items:stretch;gap:8px;margin-top:4px}
+.flow .node{flex:1 1 170px;background:var(--surface-2);border-radius:14px;padding:12px 14px;min-width:0}
+.flow .node b{display:block;font-size:14px}
+.flow .node span{font-size:12.5px;color:var(--text-2)}
+.flow .node code{font-size:12px;background:var(--surface-3);padding:1px 6px;border-radius:6px}
+.flow .arr{display:grid;place-items:center;color:var(--muted);flex:0 0 auto}
+@media(max-width:700px){.flow .arr{width:100%;transform:rotate(90deg);height:18px}}
+footer{margin-top:22px;text-align:center;font-size:12.5px;color:var(--muted)}
+footer a{color:inherit}
+
+.toast{position:fixed;left:50%;bottom:22px;transform:translate(-50%,30px);opacity:0;pointer-events:none;background:var(--text-1);color:var(--page);padding:10px 16px;border-radius:12px;font-size:13.5px;transition:all .25s;z-index:50;max-width:calc(100% - 32px);box-shadow:0 8px 30px rgba(0,0,0,.25)}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+.toast.err{background:var(--critical);color:#fff}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.loading .kpi-val,.loading .hero{color:var(--muted)}
+</style>
+</head>
+<body>
+<div class="wrap" id="app">
+
+  <header class="top">
+    <div class="brand">
+      <div class="logo" aria-hidden="true">
+        <svg viewBox="0 0 32 32" fill="none"><path d="M8 23C8 14.5 14.5 8 25 7c-.5 10.5-7 16-15.5 16" fill="currentColor"/><path d="M7 26c3.6-4.7 7.2-7.8 12-11" stroke="var(--brand)" stroke-width="2" stroke-linecap="round"/></svg>
+      </div>
+      <div style="min-width:0">
+        <h1>Smart Farm · โรงเรือนอัจฉริยะ <span id="dbTitle">iot-125</span></h1>
+        <p>ติดตามสภาพแวดล้อมและควบคุมการรดน้ำแบบเรียลไทม์ · ESP32 + ESPHome → Firebase RTDB</p>
+      </div>
+    </div>
+    <div class="hdr-right">
+      <span class="pill" id="statusPill"><span class="dot" id="statusDot"></span><b id="statusText">กำลังเชื่อมต่อ…</b><span id="statusAge"></span></span>
+      <span class="pill" title="ชื่อฐานข้อมูล Firebase Realtime Database">
+        <svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><ellipse cx="12" cy="6" rx="7" ry="3"/><path d="M5 6v6c0 1.7 3.1 3 7 3s7-1.3 7-3V6M5 12v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6"/></svg>
+        DB <b id="dbName">iot-125</b>
+      </span>
+      <span class="pill"><b id="clock">--:--:--</b></span>
+      <button class="icon-btn" id="themeBtn" aria-label="สลับธีมสว่าง/มืด" title="สลับธีมสว่าง/มืด">
+        <svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9z"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <div class="banner" id="banner" role="status"></div>
+
+  <!-- ===== top row ===== -->
+  <section class="grid-top loading" id="topRow">
+    <!-- health -->
+    <article class="card" id="healthCard">
+      <div class="card-hd">
+        <div><h2>คะแนนสภาพแวดล้อมโรงเรือน</h2><p class="sub">ประเมินจากเซนเซอร์ทุกตัว + ค่า VPD</p></div>
+        <span class="chip st-na" id="healthChip"></span>
+      </div>
+      <div class="health">
+        <div class="hero" id="healthScore">--<small>/100</small></div>
+        <div style="font-size:13.5px;color:var(--text-2)" id="healthDesc">รอข้อมูลจากอุปกรณ์…</div>
+        <div class="meter"><i id="healthBar"></i></div>
+      </div>
+      <p class="recs-title">คำแนะนำตอนนี้</p>
+      <ul class="recs" id="recs"><li class="st-na"><span>รอข้อมูลชุดแรกจาก ESP32…</span></li></ul>
+    </article>
+
+    <!-- irrigation control -->
+    <article class="card" id="pumpCard">
+      <div class="card-hd">
+        <div><h2>ระบบรดน้ำอัจฉริยะ</h2><p class="sub">สั่งงานผ่าน <code>/control</code> · อุปกรณ์อ่านคำสั่งทุก ~10 วินาที</p></div>
+      </div>
+      <div class="pump-state" id="pumpState">
+        <div class="pump-ico" aria-hidden="true">
+          <svg viewBox="0 0 40 40" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M6 12h14a4 4 0 0 1 4 4v3"/><path d="M6 8v8"/><path d="M21 19h6v-3"/>
+            <path class="drop" d="M24 26c-1.2 1.6-1.8 2.7-1.8 3.4a1.8 1.8 0 0 0 3.6 0c0-.7-.6-1.8-1.8-3.4z" fill="currentColor"/>
+            <path class="drop d2" d="M18 27c-1.2 1.6-1.8 2.7-1.8 3.4a1.8 1.8 0 0 0 3.6 0c0-.7-.6-1.8-1.8-3.4z" fill="currentColor"/>
+            <path class="drop d3" d="M30 27c-1.2 1.6-1.8 2.7-1.8 3.4a1.8 1.8 0 0 0 3.6 0c0-.7-.6-1.8-1.8-3.4z" fill="currentColor"/>
+          </svg>
+        </div>
+        <div class="pump-txt"><b id="pumpTitle">ปั๊มน้ำ: —</b><span id="pumpSub">รอข้อมูลจากอุปกรณ์</span></div>
+      </div>
+      <div class="ctl-row">
+        <label id="modeLbl">โหมดการทำงาน</label>
+        <div class="seg" role="group" aria-labelledby="modeLbl">
+          <button type="button" data-mode="auto" aria-pressed="true">อัตโนมัติ</button>
+          <button type="button" data-mode="manual" aria-pressed="false">สั่งเอง</button>
+        </div>
+      </div>
+      <div class="ctl-row">
+        <label for="pumpSw">สั่งเปิด/ปิดปั๊ม (โหมดสั่งเอง)</label>
+        <label class="switch" id="pumpSwWrap"><input type="checkbox" id="pumpSw"><span></span></label>
+      </div>
+      <div class="rng">
+        <label for="loIn">เริ่มรดน้ำเมื่อความชื้นดินต่ำกว่า</label><output id="loOut">35%</output>
+        <input type="range" id="loIn" min="10" max="60" step="1" value="35">
+      </div>
+      <div class="rng">
+        <label for="hiIn">หยุดรดน้ำเมื่อความชื้นดินถึง</label><output id="hiOut">70%</output>
+        <input type="range" id="hiIn" min="40" max="90" step="1" value="70">
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn primary" id="saveTh" type="button">บันทึกเกณฑ์</button>
+        <button class="btn" id="resetTh" type="button">ค่าเริ่มต้น (35 / 70)</button>
+      </div>
+      <div class="sync st-na" id="syncLine"></div>
+      <div class="mini-stats" title="คำนวณจากข้อมูลย้อนหลังในช่วงเวลาที่เลือก">
+        <div><b id="psCount">—</b><span>ครั้งที่รดน้ำ</span></div>
+        <div><b id="psMin">—</b><span>นาทีที่ปั๊มทำงาน</span></div>
+        <div><b id="psLit">—</b><span>ลิตร (ประมาณ)</span></div>
+      </div>
+    </article>
+
+    <!-- device + derived -->
+    <article class="card" id="devCard">
+      <div class="card-hd">
+        <div><h2>อุปกรณ์ ESP32 (ESPHome)</h2><p class="sub">ข้อมูลจาก <code>/latest</code> ส่งทุก 5 วินาที</p></div>
+        <span class="chip st-na" id="devChip"></span>
+      </div>
+      <dl class="dev-list">
+        <dt>ชื่ออุปกรณ์</dt><dd id="dvName">—</dd>
+        <dt>สัญญาณ Wi-Fi</dt><dd id="dvRssi">—</dd>
+        <dt>เปิดเครื่องมาแล้ว</dt><dd id="dvUp">—</dd>
+        <dt>ลำดับแพ็กเก็ต</dt><dd id="dvSeq">—</dd>
+        <dt>อัปเดตล่าสุด</dt><dd id="dvTs">—</dd>
+        <dt>ถังเก็บน้ำ</dt><dd id="dvRefill">—</dd>
+      </dl>
+      <div class="derived">
+        <div class="d" title="Vapor Pressure Deficit — ตัวชี้วัดการคายน้ำของพืช"><span>VPD</span><b id="dVpd">—</b><small>kPa</small><div><span class="chip st-na" id="dVpdChip"></span></div></div>
+        <div class="d" title="อุณหภูมิที่ไอน้ำเริ่มควบแน่น ถ้าใกล้อุณหภูมิอากาศ เสี่ยงเกิดหยดน้ำบนใบ"><span>จุดน้ำค้าง</span><b id="dDew">—</b><small>°C</small><div><span class="chip st-na" id="dDewChip"></span></div></div>
+        <div class="d" title="ดัชนีความร้อน (Heat Index) — อุณหภูมิที่ร่างกายรู้สึก"><span>รู้สึกเหมือน</span><b id="dHi">—</b><small>°C</small><div><span class="chip st-na" id="dHiChip"></span></div></div>
+      </div>
+    </article>
+  </section>
+
+  <div class="sec-title"><h3>ค่าจากเซนเซอร์ (เรียลไทม์)</h3><span id="kpiNote">อัปเดตทุก 5 วินาที</span></div>
+  <section class="kpis loading" id="kpis"></section>
+
+  <!-- ===== filters (scope everything below) ===== -->
+  <div class="filters">
+    <div class="left">
+      <span class="lbl" id="rangeLbl">ช่วงเวลา</span>
+      <div class="seg" id="rangeSeg" role="group" aria-labelledby="rangeLbl"></div>
+      <span class="lbl" id="histCount"></span>
+    </div>
+    <div class="right">
+      <button class="btn" id="notifyBtn" type="button">
+        <svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
+        <span id="notifyTxt">แจ้งเตือนเมื่อวิกฤต: ปิด</span>
+      </button>
+      <button class="btn" id="csvBtn" type="button">
+        <svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 3v12m0 0-4-4m4 4 4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
+        ดาวน์โหลด CSV
+      </button>
+    </div>
+  </div>
+
+  <article class="card">
+    <div class="card-hd">
+      <div><h2>ความชื้นดิน · ระดับน้ำในถัง · การทำงานของปั๊ม</h2><p class="sub">เห็นวงจรการรดน้ำอัตโนมัติ — เส้นแนวนอนคือเกณฑ์เปิด/ปิดปั๊ม</p></div>
+    </div>
+    <div class="legend" aria-hidden="true">
+      <span><i class="key-line" style="--c:var(--s-soil)"></i>ความชื้นดิน (%)</span>
+      <span><i class="key-line" style="--c:var(--s-water)"></i>ระดับน้ำในถัง (%)</span>
+      <span><i class="key-rect" style="--c:var(--s-water)"></i>ช่วงที่ปั๊มทำงาน</span>
+      <span><i class="key-line" style="--c:var(--muted)"></i>เกณฑ์เปิด/ปิดปั๊ม</span>
+    </div>
+    <div class="chart-box"><canvas id="irrChart" aria-label="กราฟความชื้นดิน ระดับน้ำ และการทำงานของปั๊ม" role="img"></canvas></div>
+  </article>
+
+  <section class="multi" id="multi"></section>
+
+  <section class="grid-2">
+    <article class="card">
+      <div class="card-hd"><div><h2>บันทึกเหตุการณ์และการแจ้งเตือน</h2><p class="sub">ตรวจจับอัตโนมัติจากข้อมูลเรียลไทม์</p></div></div>
+      <ul class="events" id="events"><li class="empty" style="display:block">ยังไม่มีเหตุการณ์</li></ul>
+    </article>
+    <article class="card">
+      <div class="card-hd"><div><h2>ข้อมูลดิบล่าสุดจาก Firebase</h2><p class="sub" id="jsonPath">/latest</p></div></div>
+      <pre class="json" id="json">กำลังโหลด…</pre>
+    </article>
+  </section>
+
+  <article class="card" style="margin-top:16px">
+    <div class="card-hd"><div><h2>ประวัติข้อมูลล่าสุด</h2><p class="sub">จาก <code>/history</code> · ESP32 บันทึกทุก 10 วินาที (แสดง 12 รายการล่าสุด)</p></div></div>
+    <div class="tbl-wrap">
+      <table class="tbl" aria-label="ตารางประวัติข้อมูลเซนเซอร์">
+        <thead><tr>
+          <th>เวลา</th><th>อุณหภูมิ (°C)</th><th>ความชื้น (%)</th><th>ความชื้นดิน (%)</th><th>แสง (lux)</th>
+          <th>CO₂ (ppm)</th><th>pH ดิน</th><th>ถังน้ำ (%)</th><th>ปั๊ม</th><th>โหมด</th>
+        </tr></thead>
+        <tbody id="tbody"><tr><td colspan="10" class="empty">กำลังโหลด…</td></tr></tbody>
+      </table>
+    </div>
+  </article>
+
+  <article class="card" style="margin-top:16px">
+    <div class="card-hd"><div><h2>โครงสร้างระบบ</h2><p class="sub">ESP32 จำลองค่าเซนเซอร์ (random walk + รอบกลางวัน/กลางคืน) แล้วส่งขึ้น Firebase ผ่าน REST API</p></div></div>
+    <div class="flow">
+      <div class="node"><b>ESP32 + ESPHome</b><span>จำลองเซนเซอร์ 7 ชนิด + ตรรกะปั๊มอัตโนมัติ<br>PUT <code>/latest</code> ทุก 5 วิ · POST <code>/history</code> ทุก 10 วิ</span></div>
+      <div class="arr" aria-hidden="true"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14m-5-5 5 5-5 5"/></svg></div>
+      <div class="node"><b>Firebase Realtime Database</b><span>ฐานข้อมูล <code id="dbName2">iot-125</code><br><code>/latest</code> · <code>/history</code> · <code>/control</code></span></div>
+      <div class="arr" aria-hidden="true"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14m-5-5 5 5-5 5"/></svg></div>
+      <div class="node"><b>GitHub Pages /freeboard</b><span>Dashboard (index.html) รับข้อมูลแบบ realtime ผ่าน Firebase SDK และส่งคำสั่งกลับไปที่ <code>/control</code></span></div>
+    </div>
+  </article>
+
+  <footer>IoT-125 Smart Farm Dashboard · ESP32 · ESPHome · Firebase Realtime Database · GitHub Pages</footer>
+</div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script type="module">
+// =====================================================================
+//  CONFIG — แก้ databaseURL ให้ตรงกับ Firebase Realtime Database ของตัวเอง
+// =====================================================================
+const CONFIG = {
+  databaseURL: "https://iot-125-default-rtdb.asia-southeast1.firebasedatabase.app",
+  paths: { latest: "latest", history: "history", control: "control" },
+  offlineAfterSec: 30,   // ไม่มีข้อมูลใหม่เกินกี่วินาทีถือว่าอุปกรณ์ออฟไลน์
+  historyStepSec: 10,    // ESP32 POST /history ทุก 10 วินาที
+  pumpFlowLpm: 6,        // อัตราการไหลของปั๊ม (ลิตร/นาที) ใช้ประมาณการใช้น้ำ
+  sdk: "10.12.2",
+};
+const DEMO = new URLSearchParams(location.search).has("demo");
+const DB_NAME = (() => { try { return new URL(CONFIG.databaseURL).hostname.split(".")[0].replace(/-default-rtdb$/, ""); } catch { return "iot-125"; } })();
+const TZ = "Asia/Bangkok";
+
+// ---------------- metric definitions ----------------
+const METRICS = [
+  { key: "temperature",   name: "อุณหภูมิอากาศ", unit: "°C",  dec: 1, v: "--s-temp",  ideal: [20, 32],   warn: [15, 35],    hi: "ร้อน",   lo: "เย็น" },
+  { key: "humidity",      name: "ความชื้นอากาศ", unit: "%",   dec: 0, v: "--s-hum",   ideal: [50, 85],   warn: [40, 93],    hi: "ชื้นมาก", lo: "แห้ง" },
+  { key: "soil_moisture", name: "ความชื้นในดิน", unit: "%",   dec: 0, v: "--s-soil",  ideal: [35, 75],   warn: [25, 85],    hi: "แฉะ",    lo: "ดินแห้ง" },
+  { key: "light",         name: "ความเข้มแสง",   unit: "lux", dec: 0, v: "--s-light", ideal: [3000, 60000], warn: [0, 80000], hi: "แดดจัด", lo: "แสงน้อย", zero: true },
+  { key: "co2",           name: "ก๊าซ CO₂",       unit: "ppm", dec: 0, v: "--s-co2",   ideal: [350, 1000], warn: [300, 1500], hi: "สูง",    lo: "ต่ำ" },
+  { key: "soil_ph",       name: "ค่า pH ดิน",     unit: "pH",  dec: 2, v: "--s-ph",    ideal: [5.8, 6.8], warn: [5.5, 7.3],  hi: "ด่าง",   lo: "กรด" },
+  { key: "water_level",   name: "ระดับน้ำในถัง", unit: "%",   dec: 0, v: "--s-water", ideal: [30, 100],  warn: [12, 100],   hi: "เต็ม",   lo: "น้ำน้อย", zero: true },
+];
+const MULTI = ["temperature", "humidity", "light", "co2", "soil_ph", "vpd"];
+const VPD_M = { key: "vpd", name: "VPD · ความต้องการไอน้ำของอากาศ", unit: "kPa", dec: 2, v: "--text-2" };
+const RANGES = [ { label: "10 นาที", n: 60 }, { label: "30 นาที", n: 180 }, { label: "1 ชม.", n: 360 }, { label: "3 ชม.", n: 1080 } ];
+const STATUS = {
+  good:     { label: "ปกติ",       ic: "check" },
+  warning:  { label: "เฝ้าระวัง",  ic: "alert" },
+  serious:  { label: "ควรแก้ไข",   ic: "alert" },
+  critical: { label: "วิกฤต",      ic: "x" },
+  night:    { label: "กลางคืน",    ic: "moon" },
+  info:     { label: "ข้อมูล",      ic: "info" },
+  na:       { label: "ไม่มีข้อมูล", ic: "dash" },
+};
+const ICONS = {
+  check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="m8 12.5 2.8 2.7L16.5 9.5"/></svg>',
+  alert: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.9 2.4 17.6A2 2 0 0 0 4.1 20.6h15.8a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9.5v4.2M12 17h.01"/></svg>',
+  x: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M8.2 2.5h7.6l5.7 5.7v7.6l-5.7 5.7H8.2l-5.7-5.7V8.2z"/><path d="m9 9 6 6m0-6-6 6"/></svg>',
+  moon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/></svg>',
+  info: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="M12 11v5.5M12 7.5h.01"/></svg>',
+  dash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="9.5"/><path d="M8 12h8"/></svg>',
+  drop: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5c-3.3 4.4-5.5 7.6-5.5 10.2a5.5 5.5 0 0 0 11 0c0-2.6-2.2-5.8-5.5-10.2z"/></svg>',
+  clock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="9.5"/><path d="M12 7v5l3 2"/></svg>',
+};
+
+// ---------------- helpers ----------------
+const $ = (id) => document.getElementById(id);
+const nfCache = {};
+function fmt(v, d = 0) {
+  if (v === null || v === undefined || !isFinite(v)) return "—";
+  return (nfCache[d] ||= new Intl.NumberFormat("en-US", { minimumFractionDigits: d, maximumFractionDigits: d })).format(v);
+}
+const fHM  = new Intl.DateTimeFormat("th-TH", { hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZone: TZ });
+const fHMS = new Intl.DateTimeFormat("th-TH", { hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23", timeZone: TZ });
+const fDT  = new Intl.DateTimeFormat("th-TH", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23", timeZone: TZ });
+const fHour = new Intl.DateTimeFormat("en-GB", { hour: "numeric", minute: "numeric", hourCycle: "h23", timeZone: TZ });
+function bkkHour(ms) {
+  const p = fHour.formatToParts(new Date(ms));
+  return (+p.find((x) => x.type === "hour").value) + (+p.find((x) => x.type === "minute").value) / 60;
+}
+const isDaytime = (ms) => { const h = bkkHour(ms); return h >= 6.5 && h < 18; };
+const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+function cssVar(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+function rgba(hex, a) {
+  let h = hex.replace("#", "");
+  if (h.length === 3) h = h.split("").map((c) => c + c).join("");
+  const n = parseInt(h, 16);
+  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
+}
+function ago(sec) {
+  if (sec < 0) sec = 0;
+  if (sec < 60) return `${Math.floor(sec)} วิ ที่แล้ว`;
+  if (sec < 3600) return `${Math.floor(sec / 60)} นาที ที่แล้ว`;
+  if (sec < 86400) return `${Math.floor(sec / 3600)} ชม. ที่แล้ว`;
+  return `${Math.floor(sec / 86400)} วัน ที่แล้ว`;
+}
+function fmtUptime(s) {
+  if (!isFinite(s)) return "—";
+  const d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600), m = Math.floor((s % 3600) / 60), ss = Math.floor(s % 60);
+  if (d) return `${d} วัน ${h} ชม. ${m} นาที`;
+  if (h) return `${h} ชม. ${m} นาที`;
+  if (m) return `${m} นาที ${ss} วิ`;
+  return `${ss} วินาที`;
+}
+function setChip(el, s, text) {
+  el.className = "chip st-" + s;
+  el.innerHTML = ICONS[STATUS[s]?.ic || "dash"];
+  el.append(document.createTextNode(text ?? STATUS[s]?.label ?? ""));
+}
+let toastT;
+function toast(msg, err = false) {
+  const t = $("toast");
+  t.textContent = msg; t.className = "toast show" + (err ? " err" : "");
+  clearTimeout(toastT); toastT = setTimeout(() => (t.className = "toast"), 3200);
+}
+function banner(kind, html) {
+  const b = $("banner");
+  if (!kind) { b.className = "banner"; b.innerHTML = ""; return; }
+  b.className = "banner show " + kind;
+  b.innerHTML = (kind === "err" ? ICONS.x : kind === "warn" ? ICONS.alert : ICONS.info).replace("<svg", '<svg class="i"') + "<div>" + html + "</div>";
+}
+
+// ---------------- agronomy ----------------
+const svp = (t) => 0.6108 * Math.exp((17.27 * t) / (t + 237.3));         // kPa
+const vpd = (t, rh) => svp(t) * (1 - rh / 100);
+function dewPoint(t, rh) { const g = Math.log(Math.max(rh, 1) / 100) + (17.62 * t) / (243.12 + t); return (243.12 * g) / (17.62 - g); }
+function heatIndex(t, rh) {
+  if (t < 27 || rh < 40) return t;
+  const f = t * 9 / 5 + 32;
+  const hi = -42.379 + 2.04901523 * f + 10.14333127 * rh - 0.22475541 * f * rh - 0.00683783 * f * f - 0.05481717 * rh * rh
+    + 0.00122874 * f * f * rh + 0.00085282 * f * rh * rh - 0.00000199 * f * f * rh * rh;
+  return (hi - 32) * 5 / 9;
+}
+function vpdStatus(v) {
+  if (v < 0.4) return ["warning", "ต่ำ เสี่ยงเชื้อรา"];
+  if (v < 0.8) return ["good", "ค่อนข้างต่ำ"];
+  if (v <= 1.5) return ["good", "เหมาะสม"];
+  if (v <= 2.2) return ["warning", "ค่อนข้างสูง"];
+  return ["critical", "สูง พืชเครียด"];
+}
+function statusOf(m, v, ts) {
+  if (v === null || v === undefined || !isFinite(v)) return ["na", null];
+  if (m.key === "light") {
+    if (!isDaytime(ts)) return ["night", null];
+    if (v > 60000) return ["warning", m.hi];
+    if (v < 3000) return ["warning", m.lo];
+    return ["good", null];
+  }
+  if (v >= m.ideal[0] && v <= m.ideal[1]) return ["good", null];
+  const note = v > m.ideal[1] ? m.hi : m.lo;
+  if (v >= m.warn[0] && v <= m.warn[1]) return ["warning", note];
+  return ["critical", note];
+}
+
+// ---------------- state ----------------
+const state = {
+  latest: null, history: [], rangeN: 180, control: { mode: "auto", pump: false, soil_low: 35, soil_high: 70 },
+  controlLoaded: false, offset: 0, connected: false, online: null, events: [], stable: {}, pending: {},
+  thDirty: false, notify: false, firstData: true, unsubHistory: null,
+};
+const serverNow = () => Date.now() + state.offset;
+function normalize(key, v) {
+  const r = { key, ...v };
+  if (typeof r.ts !== "number") {
+    const t = typeof r.time === "string" && r.time ? Date.parse(r.time.replace(" ", "T") + "+07:00") : NaN;
+    r.ts = isFinite(t) ? t : Date.now();
+  }
+  for (const m of METRICS) r[m.key] = r[m.key] === undefined || r[m.key] === null ? null : Number(r[m.key]);
+  r.pump = r.pump === true || r.pump === "true" || r.pump === 1;
+  r.vpd = r.temperature !== null && r.humidity !== null ? vpd(r.temperature, r.humidity) : null;
+  return r;
+}
+
+// =====================================================================
+//  DATA SOURCES
+// =====================================================================
+async function firebaseApi() {
+  const base = `https://www.gstatic.com/firebasejs/${CONFIG.sdk}`;
+  const { initializeApp } = await import(`${base}/firebase-app.js`);
+  const D = await import(`${base}/firebase-database.js`);
+  const app = initializeApp({ databaseURL: CONFIG.databaseURL });
+  const db = D.getDatabase(app);
+  const onErr = (e) => { console.error(e); banner("err", `อ่านข้อมูลจาก Firebase ไม่ได้: <b>${String(e.message || e).replace(/[<>&]/g, "")}</b><br>ตรวจสอบ Rules ของ Realtime Database ว่าอนุญาตให้อ่าน (.read) ได้`); };
+  return {
+    latest: (cb) => D.onValue(D.ref(db, CONFIG.paths.latest), (s) => cb(s.val()), onErr),
+    history: (n, cb) => D.onChildAdded(D.query(D.ref(db, CONFIG.paths.history), D.limitToLast(n)), (s) => cb(s.key, s.val()), onErr),
+    control: (cb) => D.onValue(D.ref(db, CONFIG.paths.control), (s) => cb(s.val()), () => {}),
+    connected: (cb) => D.onValue(D.ref(db, ".info/connected"), (s) => cb(!!s.val())),
+    offset: (cb) => D.onValue(D.ref(db, ".info/serverTimeOffset"), (s) => cb(Number(s.val()) || 0)),
+    writeControl: (c) => D.set(D.ref(db, CONFIG.paths.control), { ...c, updated_at: D.serverTimestamp(), source: "dashboard" }),
+  };
+}
+
+// โหมดสาธิต (?demo=1) — จำลองข้อมูลในเบราว์เซอร์ ใช้ทดสอบหน้าตาเท่านั้น
+function demoApi() {
+  const L = { latest: [], hist: [], control: [] };
+  let control = { mode: "auto", pump: false, soil_low: 35, soil_high: 70 };
+  const S = { t: 29, h: 72, soil: 52, light: 0, cloud: 0.8, co2: 480, ph: 6.5, water: 85, pump: false, refill: false, seq: 0, boot: 0 };
+  const hist = []; let k = 0;
+  const rnd = (a) => (Math.random() * 2 - 1) * a;
+  function step(ts) {
+    const hr = bkkHour(ts); const day = hr > 6 && hr < 18.5 ? Math.sin(((hr - 6) / 12.5) * Math.PI) : 0;
+    S.t = clamp(S.t + (26 + 7.5 * day - S.t) * 0.08 + rnd(0.25), 18, 42);
+    S.h = clamp(S.h + (88 - 26 * day - S.h) * 0.08 + rnd(0.8), 30, 99);
+    S.cloud = clamp(S.cloud + rnd(0.06), 0.35, 1);
+    S.light = clamp(S.light + (day * 52000 * S.cloud + (day > 0 ? 0 : 2) - S.light) * 0.5 + rnd(300 * day), 0, 100000);
+    S.co2 = clamp(S.co2 + (620 - 220 * day - S.co2) * 0.06 + rnd(6), 350, 1500);
+    S.ph = clamp(S.ph + (6.4 - S.ph) * 0.02 + rnd(0.015), 4.5, 8.5);
+    S.soil -= 0.1 + 0.22 * day + Math.max(0, S.t - 30) * 0.02 + Math.max(0, 70 - S.h) * 0.003;
+    if (control.mode === "auto") { if (!S.pump && S.soil < control.soil_low) S.pump = true; if (S.pump && S.soil >= control.soil_high) S.pump = false; }
+    else S.pump = control.pump;
+    if (S.water < 5) S.pump = false;
+    if (S.pump) { S.soil += 1.6 + rnd(0.2); S.water -= 0.6; }
+    if (S.water < 25) S.refill = true; if (S.water >= 90) S.refill = false;
+    S.water += S.refill ? 0.5 : 0.05;
+    S.soil = clamp(S.soil, 5, 95); S.water = clamp(S.water, 0, 100); S.seq++;
+    return { device: "iot-125", seq: S.seq, temperature: +S.t.toFixed(1), humidity: +S.h.toFixed(1), soil_moisture: +S.soil.toFixed(1),
+      light: Math.round(S.light), co2: Math.round(S.co2), soil_ph: +S.ph.toFixed(2), water_level: +S.water.toFixed(1), pump: S.pump,
+      refill: S.refill, mode: control.mode, soil_low: control.soil_low, soil_high: control.soil_high, rssi: -52 - Math.round(Math.random() * 8),
+      uptime: Math.round((ts - S.boot) / 1000), time: "", ts };
+  }
+  const now = Date.now(); S.boot = now - 3 * 3600e3 - 60e3;
+  for (let ts = now - 3 * 3600e3; ts <= now; ts += 5000) { const r = step(ts); if (r.seq % 2 === 0) hist.push(["d" + String(k++).padStart(6, "0"), r]); }
+  let latest = step(now);
+  setInterval(() => {
+    latest = step(Date.now()); L.latest.forEach((f) => f(latest));
+    if (latest.seq % 2 === 0) { const e = ["d" + String(k++).padStart(6, "0"), latest]; hist.push(e); L.hist.forEach((f) => f(...e)); }
+  }, 5000);
+  return {
+    latest: (cb) => { L.latest.push(cb); setTimeout(() => cb(latest), 150); return () => {}; },
+    history: (n, cb) => { hist.slice(-n).forEach((e) => cb(...e)); L.hist.push(cb); return () => { L.hist = L.hist.filter((f) => f !== cb); }; },
+    control: (cb) => { L.control.push(cb); setTimeout(() => cb(control), 100); return () => {}; },
+    connected: (cb) => { setTimeout(() => cb(true), 100); return () => {}; },
+    offset: (cb) => { cb(0); return () => {}; },
+    writeControl: async (c) => { control = { ...c }; L.control.forEach((f) => f(control)); },
+  };
+}
+
+// =====================================================================
+//  UI BUILD
+// =====================================================================
+const kpiEls = {};
+function buildKpis() {
+  const box = $("kpis");
+  for (const m of METRICS) {
+    const card = document.createElement("article");
+    card.className = "card kpi"; card.style.setProperty("--c", `var(${m.v})`);
+    card.innerHTML = `<div class="kpi-hd"><span class="kpi-name"><i></i><em></em></span></div>
+      <div class="kpi-row"><div class="kpi-val"><span>--</span><small></small></div><span class="chip st-na"></span></div>
+      <svg class="spark" viewBox="0 0 200 38" preserveAspectRatio="none" aria-hidden="true">
+        <path class="a" fill="var(--c)" fill-opacity=".10" d=""/><path class="l" fill="none" stroke="var(--c)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke" d=""/></svg>
+      <div class="kpi-ft"><span class="mm">ต่ำสุด — · สูงสุด —</span><span class="rg"></span></div>`;
+    card.querySelector("em").textContent = m.name;
+    card.querySelector(".kpi-val small").textContent = m.unit;
+    card.querySelector(".rg").textContent = m.key === "light" ? "เหมาะสม 3k–60k" : m.key === "water_level" ? "ควร ≥ 30%" : `เหมาะสม ${m.ideal[0]}–${m.ideal[1]}`;
+    box.append(card);
+    kpiEls[m.key] = { card, val: card.querySelector(".kpi-val span"), chip: card.querySelector(".chip"), mm: card.querySelector(".mm"), l: card.querySelector("path.l"), a: card.querySelector("path.a") };
+  }
+}
+function buildRanges() {
+  const seg = $("rangeSeg");
+  for (const r of RANGES) {
+    const b = document.createElement("button");
+    b.type = "button"; b.textContent = r.label; b.dataset.n = r.n; b.setAttribute("aria-pressed", String(r.n === state.rangeN));
+    b.onclick = () => { if (state.rangeN === r.n) return; state.rangeN = r.n; [...seg.children].forEach((x) => x.setAttribute("aria-pressed", String(+x.dataset.n === r.n))); subscribeHistory(); };
+    seg.append(b);
+  }
+}
+
+// ---------------- charts ----------------
+const charts = {};
+const crosshair = {
+  id: "crosshair",
+  afterDatasetsDraw(chart) {
+    const act = chart.tooltip?.getActiveElements?.() || [];
+    if (!act.length) return;
+    const x = act[0].element.x, { top, bottom } = chart.chartArea, ctx = chart.ctx;
+    ctx.save(); ctx.strokeStyle = cssVar("--axis"); ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(x, top); ctx.lineTo(x, bottom); ctx.stroke(); ctx.restore();
+  },
+};
+const thresholdLines = {
+  id: "thresholds",
+  afterDatasetsDraw(chart, _a, opts) {
+    const lines = opts?.lines || []; if (!lines.length) return;
+    const { left, right, top, bottom } = chart.chartArea, y = chart.scales.y, ctx = chart.ctx;
+    ctx.save(); ctx.font = "500 11px 'IBM Plex Sans Thai', system-ui, sans-serif"; ctx.textAlign = "right"; ctx.textBaseline = "bottom";
+    for (const l of lines) {
+      const py = Math.round(y.getPixelForValue(l.v)) + 0.5; if (py < top || py > bottom) continue;
+      ctx.strokeStyle = cssVar("--muted"); ctx.globalAlpha = 0.85; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(left, py); ctx.lineTo(right, py); ctx.stroke();
+      ctx.globalAlpha = 1; ctx.fillStyle = cssVar("--text-2"); ctx.fillText(l.label, right - 4, py - 3);
+    }
+    ctx.restore();
+  },
+};
+function chartOptions({ unit, dec, zero, yMin, yMax }) {
+  return {
+    responsive: true, maintainAspectRatio: false, animation: false, parsing: false, normalized: true,
+    interaction: { mode: "index", intersect: false, axis: "x" },
+    layout: { padding: { top: 4, right: 6 } },
+    plugins: {
+      legend: { display: false },
+      thresholds: { lines: [] },
+      tooltip: {
+        usePointStyle: true, padding: 10, boxPadding: 6, caretSize: 0, cornerRadius: 10, borderWidth: 1,
+        titleFont: { weight: "500", size: 12 }, bodyFont: { size: 13 },
+        callbacks: {
+          title: (items) => (items.length ? fDT.format(new Date(items[0].parsed.x)) : ""),
+          label: (ctx) => ctx.dataset.key === "pump" ? ` ปั๊ม: ${ctx.parsed.y > 0 ? "ทำงาน" : "หยุด"}` : ` ${fmt(ctx.parsed.y, ctx.dataset.dec ?? dec)} ${ctx.dataset.unit ?? unit}  ${ctx.dataset.label}`,
+          labelPointStyle: () => ({ pointStyle: "line", rotation: 0 }),
+        },
+      },
+    },
+    scales: {
+      x: { type: "linear", grid: { drawTicks: false }, border: { display: true }, ticks: { maxTicksLimit: 6, padding: 8, maxRotation: 0, font: { size: 11 }, callback: (v) => fHM.format(new Date(v)) } },
+      y: { min: yMin, max: yMax, beginAtZero: !!zero, grace: "6%", grid: { drawTicks: false }, border: { display: false }, ticks: { maxTicksLimit: 5, padding: 8, font: { size: 11 }, callback: (v) => fmt(v, Math.abs(v) < 10 && v % 1 ? 1 : 0) } },
+    },
+    elements: { line: { borderWidth: 2, tension: 0.3, borderCapStyle: "round", borderJoinStyle: "round" }, point: { radius: 0, hoverRadius: 5, hitRadius: 12, hoverBorderWidth: 2 } },
+  };
+}
+function themeChart(ch) {
+  const o = ch.options, grid = cssVar("--grid"), muted = cssVar("--muted"), axis = cssVar("--axis");
+  o.scales.x.grid.color = grid; o.scales.y.grid.color = grid; o.scales.x.border.color = axis;
+  o.scales.x.ticks.color = muted; o.scales.y.ticks.color = muted;
+  const tt = o.plugins.tooltip;
+  tt.backgroundColor = cssVar("--surface"); tt.titleColor = cssVar("--text-2"); tt.bodyColor = cssVar("--text-1"); tt.borderColor = cssVar("--border-solid");
+  for (const ds of ch.data.datasets) {
+    const c = cssVar(ds.colorVar);
+    ds.borderColor = c; ds.pointHoverBackgroundColor = c; ds.pointHoverBorderColor = cssVar("--surface");
+    ds.backgroundColor = ds.key === "pump" ? rgba(c, 0.16) : rgba(c, 0.10);
+  }
+}
+function buildCharts() {
+  Chart.defaults.font.family = "'IBM Plex Sans Thai', system-ui, -apple-system, 'Segoe UI', sans-serif";
+  charts.irr = new Chart($("irrChart"), {
+    type: "line",
+    data: { datasets: [
+      { key: "soil_moisture", label: "ความชื้นดิน", unit: "%", dec: 0, colorVar: "--s-soil", data: [], fill: false, order: 1 },
+      { key: "water_level", label: "ระดับน้ำในถัง", unit: "%", dec: 0, colorVar: "--s-water", data: [], fill: false, order: 2 },
+      { key: "pump", label: "ปั๊ม", colorVar: "--s-water", data: [], stepped: "before", fill: "origin", borderWidth: 0, pointHoverRadius: 0, order: 3 },
+    ] },
+    options: chartOptions({ unit: "%", dec: 0, yMin: 0, yMax: 100 }),
+    plugins: [crosshair, thresholdLines],
+  });
+  charts.irr.options.scales.y.grace = 0;
+  const box = $("multi");
+  for (const key of MULTI) {
+    const m = METRICS.find((x) => x.key === key) || VPD_M;
+    const card = document.createElement("article");
+    card.className = "card";
+    card.innerHTML = `<div class="card-hd"><div><h2></h2><p class="sub"></p></div><span class="cur"><b>--</b> <span></span></span></div><div class="chart-box sm"><canvas role="img"></canvas></div>`;
+    card.querySelector("h2").textContent = m.name;
+    card.querySelector(".sub").textContent = m.key === "light" ? "กลางวันควรอยู่ระหว่าง 3,000–60,000 lux"
+      : m.key === "vpd" ? "คำนวณจากอุณหภูมิ + ความชื้น · พืชโตดีช่วง 0.8–1.5 kPa" : `ช่วงเหมาะสม ${m.ideal[0]}–${m.ideal[1]} ${m.unit}`;
+    card.querySelector(".cur > span").textContent = m.unit;
+    card.querySelector("canvas").setAttribute("aria-label", `กราฟ${m.name}ย้อนหลัง`);
+    box.append(card);
+    charts[key] = new Chart(card.querySelector("canvas"), {
+      type: "line",
+      data: { datasets: [{ key, label: m.name, unit: m.unit, dec: m.dec, colorVar: m.v, data: [], fill: "origin" }] },
+      options: chartOptions({ unit: m.unit, dec: m.dec, zero: m.zero }),
+      plugins: key === "vpd" ? [crosshair, thresholdLines] : [crosshair],
+    });
+    if (key === "vpd") charts[key].options.plugins.thresholds.lines = [{ v: 0.8, label: "0.8 kPa" }, { v: 1.5, label: "1.5 kPa" }];
+    charts[key].$cur = card.querySelector(".cur b");
+  }
+  Object.values(charts).forEach((c) => { themeChart(c); c.update("none"); });
+}
+function updateCharts() {
+  const H = state.history;
+  const x0 = H.length ? H[0].ts : serverNow() - state.rangeN * CONFIG.historyStepSec * 1000;
+  const x1 = H.length ? H[H.length - 1].ts : serverNow();
+  const irr = charts.irr;
+  irr.data.datasets[0].data = H.map((r) => ({ x: r.ts, y: r.soil_moisture }));
+  irr.data.datasets[1].data = H.map((r) => ({ x: r.ts, y: r.water_level }));
+  irr.data.datasets[2].data = H.map((r) => ({ x: r.ts, y: r.pump ? 100 : 0 }));
+  irr.options.scales.x.min = x0; irr.options.scales.x.max = x1;
+  const src = state.latest || state.control;
+  const lo = Number(src.soil_low ?? 35), hi = Number(src.soil_high ?? 70);
+  irr.options.plugins.thresholds.lines = [{ v: lo, label: `เริ่มรดน้ำ < ${fmt(lo)}%` }, { v: hi, label: `หยุดรดน้ำ ≥ ${fmt(hi)}%` }];
+  irr.update("none");
+  for (const key of MULTI) {
+    const c = charts[key];
+    c.data.datasets[0].data = H.filter((r) => r[key] !== null).map((r) => ({ x: r.ts, y: r[key] }));
+    c.options.scales.x.min = x0; c.options.scales.x.max = x1;
+    c.update("none");
+  }
+}
+
+// =====================================================================
+//  RENDER
+// =====================================================================
+function sparkPaths(vals) {
+  const n = vals.length; if (n < 2) return ["", ""];
+  let mn = Math.min(...vals), mx = Math.max(...vals);
+  if (mx - mn < 1e-6) { mx += 1; mn -= 1; }
+  const W = 200, Hh = 38, p = 3, sx = W / (n - 1);
+  const pts = vals.map((v, i) => [i * sx, Hh - p - ((v - mn) / (mx - mn)) * (Hh - 2 * p)]);
+  const line = pts.map((q, i) => `${i ? "L" : "M"}${q[0].toFixed(1)},${q[1].toFixed(1)}`).join("");
+  return [line, `${line}L${W},${Hh}L0,${Hh}Z`];
+}
+function renderKpis() {
+  const L = state.latest; if (!L) return;
+  $("kpis").classList.remove("loading");
+  for (const m of METRICS) {
+    const e = kpiEls[m.key], v = L[m.key];
+    e.val.textContent = fmt(v, m.dec);
+    const [s, note] = statusOf(m, v, L.ts);
+    setChip(e.chip, s, note ? `${STATUS[s].label} · ${note}` : STATUS[s].label);
+    e.card.classList.add("flash"); setTimeout(() => e.card.classList.remove("flash"), 700);
+    if (charts[m.key]?.$cur) charts[m.key].$cur.textContent = fmt(v, m.dec);
+  }
+  if (charts.vpd?.$cur) charts.vpd.$cur.textContent = fmt(L.vpd, 2);
+}
+function renderHistoryDerived() {
+  const H = state.history;
+  for (const m of METRICS) {
+    const e = kpiEls[m.key];
+    const vals = H.map((r) => r[m.key]).filter((v) => v !== null && isFinite(v));
+    const sp = sparkPaths(vals.slice(-60));
+    e.l.setAttribute("d", sp[0]); e.a.setAttribute("d", sp[1]);
+    e.mm.textContent = vals.length ? `ต่ำสุด ${fmt(Math.min(...vals), m.dec)} · สูงสุด ${fmt(Math.max(...vals), m.dec)}` : "ต่ำสุด — · สูงสุด —";
+  }
+  // pump stats
+  let count = 0, onSamples = 0, prev = null;
+  for (const r of H) { if (r.pump) { onSamples++; if (prev === false) count++; } prev = r.pump; }
+  const minutes = (onSamples * CONFIG.historyStepSec) / 60;
+  $("psCount").textContent = H.length ? fmt(count) : "—";
+  $("psMin").textContent = H.length ? fmt(minutes, 1) : "—";
+  $("psLit").textContent = H.length ? fmt(minutes * CONFIG.pumpFlowLpm) : "—";
+  const span = H.length > 1 ? (H[H.length - 1].ts - H[0].ts) / 60000 : 0;
+  $("histCount").textContent = H.length ? `${fmt(H.length)} จุดข้อมูล · ครอบคลุม ${span >= 60 ? fmt(span / 60, 1) + " ชม." : fmt(span) + " นาที"}` : "ยังไม่มีข้อมูลย้อนหลัง";
+  renderTable();
+}
+function renderTable() {
+  const tb = $("tbody"); tb.textContent = "";
+  const rows = state.history.slice(-12).reverse();
+  if (!rows.length) { const tr = tb.insertRow(), td = tr.insertCell(); td.colSpan = 10; td.className = "empty"; td.textContent = "ยังไม่มีข้อมูลใน /history"; return; }
+  for (const r of rows) {
+    const tr = tb.insertRow();
+    const cells = [fHMS.format(new Date(r.ts)), fmt(r.temperature, 1), fmt(r.humidity, 0), fmt(r.soil_moisture, 0), fmt(r.light, 0), fmt(r.co2, 0), fmt(r.soil_ph, 2), fmt(r.water_level, 0)];
+    for (const c of cells) tr.insertCell().textContent = c;
+    const p = tr.insertCell(), tag = document.createElement("span"); tag.className = "tag" + (r.pump ? " on" : ""); tag.textContent = r.pump ? "ทำงาน" : "หยุด"; p.append(tag);
+    tr.insertCell().textContent = r.mode === "manual" ? "สั่งเอง" : "อัตโนมัติ";
+  }
+}
+function recommendations(L, v) {
+  const r = [], add = (s, t) => r.push([s, t]);
+  const day = isDaytime(L.ts);
+  if (L.pump) add("info", `ปั๊มกำลังรดน้ำ (${L.mode === "manual" ? "สั่งเอง" : "อัตโนมัติ"}) — ความชื้นดินตอนนี้ ${fmt(L.soil_moisture)}%`);
+  if (L.water_level < 5) add("critical", "น้ำในถังหมด ระบบตัดปั๊มอัตโนมัติเพื่อป้องกันปั๊มเสียหาย — เติมน้ำทันที");
+  else if (L.water_level < 20) add("warning", `น้ำในถังเหลือ ${fmt(L.water_level)}% — ${L.refill ? "ระบบกำลังเติมน้ำเข้าถัง" : "ควรเติมน้ำ"}`);
+  if (L.soil_moisture < (L.soil_low ?? 35) && !L.pump && L.mode === "manual") add("warning", "ดินแห้งกว่าเกณฑ์ — เปิดปั๊มหรือสลับเป็นโหมดอัตโนมัติ");
+  if (L.soil_moisture > 85) add("warning", "ดินชื้นเกินไป เสี่ยงรากเน่า — งดรดน้ำชั่วคราว");
+  if (L.temperature > 35) add("critical", "อากาศร้อนจัด — เปิดพัดลมระบายอากาศ พ่นหมอก และกางสแลนพรางแสง");
+  else if (L.temperature > 32) add("warning", "อุณหภูมิเริ่มสูง — เพิ่มการระบายอากาศ/พ่นหมอกลดอุณหภูมิ");
+  else if (L.temperature < 15) add("warning", "อากาศเย็น — ปิดช่องลมเพื่อเก็บความอบอุ่น");
+  if (L.humidity > 93) add("warning", "ความชื้นอากาศสูงมาก เสี่ยงโรคเชื้อรา — เปิดพัดลมหมุนเวียนอากาศ");
+  else if (L.humidity < 40) add("warning", "อากาศแห้ง — พ่นหมอกเพิ่มความชื้น");
+  if (isFinite(v)) {
+    if (v > 2.2) add("critical", `VPD ${fmt(v, 2)} kPa สูงมาก พืชคายน้ำหนักและปิดปากใบ — พ่นหมอก/พรางแสงด่วน`);
+    else if (v > 1.5) add("warning", `VPD ${fmt(v, 2)} kPa ค่อนข้างสูง — พ่นหมอกช่วยลดการคายน้ำของพืช`);
+    else if (v < 0.4) add("warning", `VPD ${fmt(v, 2)} kPa ต่ำ อากาศอิ่มตัว เสี่ยงเชื้อรา — เพิ่มการระบายอากาศ`);
+  }
+  if (day && L.light > 60000) add("warning", "แดดจัดเกิน 60,000 lux — กางสแลนพรางแสง 50%");
+  if (day && L.light < 3000) add("warning", "แสงน้อยช่วงกลางวัน — พิจารณาเปิดไฟปลูกพืช (Grow light)");
+  if (L.co2 > 1000) add("warning", "CO₂ สูงเกิน 1,000 ppm — เปิดระบายอากาศ");
+  if (L.soil_ph < 5.5) add("warning", "ดินเป็นกรด — ใส่ปูนโดโลไมท์เพื่อปรับ pH");
+  else if (L.soil_ph > 7.3) add("warning", "ดินเป็นด่าง — ใส่กำมะถันผงหรือปุ๋ยแอมโมเนียมซัลเฟต");
+  if (!r.some(([s]) => s === "warning" || s === "critical")) add("good", "สภาพแวดล้อมอยู่ในเกณฑ์เหมาะสม ไม่ต้องดำเนินการเพิ่ม");
+  const order = { critical: 0, warning: 1, info: 2, good: 3 };
+  return r.sort((a, b) => order[a[0]] - order[b[0]]).slice(0, 5);
+}
+function renderHealth() {
+  const L = state.latest; if (!L) return;
+  $("topRow").classList.remove("loading");
+  const v = vpd(L.temperature, L.humidity);
+  const weights = { good: 100, night: 100, warning: 55, critical: 10 };
+  const ss = METRICS.map((m) => statusOf(m, L[m.key], L.ts)[0]).filter((s) => s !== "na");
+  ss.push(vpdStatus(v)[0]);
+  let score = Math.round(ss.reduce((a, s) => a + weights[s], 0) / ss.length);
+  const offline = state.online === false;
+  const lvl = offline ? "na" : score >= 85 ? "good" : score >= 65 ? "warning" : "critical";
+  const label = offline ? "อุปกรณ์ออฟไลน์" : score >= 85 ? "ดีมาก" : score >= 65 ? "พอใช้" : "ต้องดูแลด่วน";
+  $("healthScore").innerHTML = `${offline ? "--" : score}<small>/100</small>`;
+  setChip($("healthChip"), lvl, label);
+  const bad = ss.filter((s) => s === "warning" || s === "critical").length;
+  $("healthDesc").textContent = offline ? "ไม่ได้รับข้อมูลใหม่จาก ESP32 — ค่าที่แสดงเป็นค่าล่าสุดที่บันทึกไว้" : bad ? `มี ${bad} ค่าที่ควรเฝ้าระวัง จากทั้งหมด ${ss.length} ค่า` : `ทั้ง ${ss.length} ค่าอยู่ในเกณฑ์เหมาะสม`;
+  const bar = $("healthBar"); bar.style.width = (offline ? 0 : score) + "%"; bar.style.background = `var(--${lvl === "na" ? "muted" : lvl})`;
+  const ul = $("recs"); ul.textContent = "";
+  for (const [s, t] of recommendations(L, v)) {
+    const li = document.createElement("li"); li.className = "st-" + s;
+    li.innerHTML = ICONS[STATUS[s].ic]; const sp = document.createElement("span"); sp.textContent = t; li.append(sp); ul.append(li);
+  }
+  // derived
+  const dp = dewPoint(L.temperature, L.humidity), hi = heatIndex(L.temperature, L.humidity);
+  $("dVpd").textContent = fmt(v, 2); const [vs, vn] = vpdStatus(v); setChip($("dVpdChip"), vs, vn);
+  $("dDew").textContent = fmt(dp, 1);
+  const gap = L.temperature - dp; setChip($("dDewChip"), gap < 2 ? "warning" : "good", gap < 2 ? "เสี่ยงน้ำค้างเกาะใบ" : `ห่าง ${fmt(gap, 1)}°C`);
+  $("dHi").textContent = fmt(hi, 1);
+  setChip($("dHiChip"), hi >= 41 ? "critical" : hi >= 33 ? "warning" : "good", hi >= 41 ? "อันตราย" : hi >= 33 ? "ร้อน ระวัง" : "สบาย");
+}
+function renderDevice() {
+  const L = state.latest; if (!L) return;
+  $("dvName").textContent = `${L.device || "—"} (ESP32)`;
+  const r = Number(L.rssi), q = !isFinite(r) || r === 0 ? 0 : r >= -55 ? 4 : r >= -67 ? 3 : r >= -75 ? 2 : 1;
+  const ql = ["—", "อ่อน", "พอใช้", "ดี", "ดีมาก"][q];
+  const dd = $("dvRssi"); dd.innerHTML = `<span class="bars">${[1, 2, 3, 4].map((i) => `<i class="${i <= q ? "on" : ""}"></i>`).join("")}</span>`;
+  dd.append(document.createTextNode(isFinite(r) && r !== 0 ? `${r} dBm · ${ql}` : "—"));
+  $("dvUp").textContent = fmtUptime(Number(L.uptime));
+  $("dvSeq").textContent = L.seq !== undefined ? `#${fmt(L.seq)}` : "—";
+  $("dvRefill").textContent = L.refill ? "กำลังเติมน้ำเข้าถัง" : `ปกติ (${fmt(L.water_level)}%)`;
+}
+function renderJson() {
+  const L = state.latest;
+  $("json").textContent = L ? JSON.stringify(Object.fromEntries(Object.entries(L).filter(([k]) => k !== "key")), null, 2) : "null — ยังไม่มีข้อมูลใน /latest";
+}
+function renderControl() {
+  const c = state.control, L = state.latest;
+  document.querySelectorAll("#pumpCard .seg button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.mode === c.mode)));
+  const sw = $("pumpSw"); sw.checked = !!c.pump; sw.disabled = c.mode !== "manual";
+  $("pumpSwWrap").classList.toggle("disabled", c.mode !== "manual");
+  if (!state.thDirty) { $("loIn").value = c.soil_low; $("hiIn").value = c.soil_high; showTh(); }
+  const ps = $("pumpState");
+  if (L) {
+    ps.classList.toggle("pump-on", !!L.pump);
+    $("pumpTitle").textContent = L.pump ? "ปั๊มน้ำ: กำลังรดน้ำ" : "ปั๊มน้ำ: หยุด";
+    $("pumpSub").textContent = `โหมด${L.mode === "manual" ? "สั่งเอง" : "อัตโนมัติ"} · ความชื้นดิน ${fmt(L.soil_moisture)}% · น้ำในถัง ${fmt(L.water_level)}%`;
+  }
+  const sync = $("syncLine");
+  const set = (s, t) => { sync.className = "sync st-" + s; sync.innerHTML = ICONS[STATUS[s].ic]; sync.append(document.createTextNode(t)); };
+  if (!L) return set("na", "รอข้อมูลจากอุปกรณ์");
+  const lockout = c.mode === "manual" && c.pump && L.water_level < 5;
+  const match = L.mode === c.mode && (c.mode === "auto" || !!L.pump === !!c.pump) &&
+    Math.round(L.soil_low ?? 35) === Math.round(c.soil_low) && Math.round(L.soil_high ?? 70) === Math.round(c.soil_high);
+  if (lockout) set("warning", "ปั๊มถูกล็อก: น้ำในถังต่ำกว่า 5% (ป้องกันปั๊มเดินตัวเปล่า)");
+  else if (match) set("good", "อุปกรณ์ทำงานตามคำสั่งล่าสุดแล้ว");
+  else set("info", "ส่งคำสั่งแล้ว — รออุปกรณ์อ่านคำสั่ง (ทุก ~10 วินาที)…");
+}
+function showTh() { $("loOut").textContent = $("loIn").value + "%"; $("hiOut").textContent = $("hiIn").value + "%"; }
+function renderEvents() {
+  const ul = $("events"); ul.textContent = "";
+  if (!state.events.length) { const li = document.createElement("li"); li.className = "empty"; li.style.display = "block"; li.textContent = "ยังไม่มีเหตุการณ์"; ul.append(li); return; }
+  for (const e of state.events) {
+    const li = document.createElement("li"); li.className = "st-" + e.s;
+    const t = document.createElement("time"); t.textContent = fHMS.format(new Date(e.ts));
+    const ic = document.createElement("span"); ic.innerHTML = ICONS[STATUS[e.s]?.ic || "info"];
+    const tx = document.createElement("span"); tx.textContent = e.text;
+    li.append(t, ic, tx); ul.append(li);
+  }
+}
+function pushEvent(s, text, ts = serverNow()) {
+  state.events.unshift({ s, text, ts });
+  if (state.events.length > 80) state.events.pop();
+  renderEvents();
+  if (state.notify && s === "critical" && "Notification" in window && Notification.permission === "granted") {
+    try { new Notification("Smart Farm IoT-125 — แจ้งเตือนวิกฤต", { body: text }); } catch {}
+  }
+}
+function detectEvents(prev, L) {
+  if (state.firstData) {
+    state.firstData = false;
+    pushEvent("good", `รับข้อมูลจาก ${L.device || "ESP32"} ผ่าน Firebase แล้ว (แพ็กเก็ต #${fmt(L.seq)})`, L.ts);
+  }
+  if (prev) {
+    if (!!prev.pump !== !!L.pump) pushEvent("info", L.pump ? `ปั๊มเริ่มรดน้ำ (${L.mode === "manual" ? "สั่งเอง" : "อัตโนมัติ"}) — ความชื้นดิน ${fmt(L.soil_moisture)}%` : `ปั๊มหยุดรดน้ำ — ความชื้นดิน ${fmt(L.soil_moisture)}%`, L.ts);
+    if (prev.mode && L.mode && prev.mode !== L.mode) pushEvent("info", `อุปกรณ์เปลี่ยนเป็นโหมด${L.mode === "manual" ? "สั่งเอง" : "อัตโนมัติ"}แล้ว`, L.ts);
+    if (!!prev.refill !== !!L.refill) pushEvent("info", L.refill ? `เริ่มเติมน้ำเข้าถัง (เหลือ ${fmt(L.water_level)}%)` : "เติมน้ำเข้าถังเสร็จแล้ว", L.ts);
+    if (L.uptime !== undefined && prev.uptime !== undefined && L.uptime + 30 < prev.uptime) pushEvent("warning", "อุปกรณ์รีสตาร์ต (uptime เริ่มนับใหม่)", L.ts);
+  }
+  // สถานะเซนเซอร์ — ต้องคงที่ 2 รอบติดกัน (กันการแจ้งเตือนกระพริบ)
+  for (const m of METRICS) {
+    const [s, note] = statusOf(m, L[m.key], L.ts);
+    if (s === "na") continue;
+    const p = state.pending[m.key];
+    if (!p || p.s !== s) { state.pending[m.key] = { s, n: 1 }; if (state.stable[m.key] !== undefined) continue; }
+    else p.n++;
+    const cur = state.pending[m.key];
+    if (state.stable[m.key] === undefined) { state.stable[m.key] = s; if (s === "warning" || s === "critical") pushEvent(s, `${m.name} ${fmt(L[m.key], m.dec)} ${m.unit} — ${STATUS[s].label}${note ? " (" + note + ")" : ""}`, L.ts); continue; }
+    if (cur.n >= 2 && state.stable[m.key] !== s) {
+      const was = state.stable[m.key]; state.stable[m.key] = s;
+      if (s === "warning" || s === "critical") pushEvent(s, `${m.name} ${fmt(L[m.key], m.dec)} ${m.unit} — ${STATUS[s].label}${note ? " (" + note + ")" : ""}`, L.ts);
+      else if ((was === "warning" || was === "critical") && s === "good") pushEvent("good", `${m.name} กลับสู่ระดับปกติ (${fmt(L[m.key], m.dec)} ${m.unit})`, L.ts);
+    }
+  }
+}
+function tick() {
+  $("clock").textContent = fHMS.format(new Date(serverNow()));
+  const L = state.latest, dot = $("statusDot"), txt = $("statusText"), age = $("statusAge");
+  let online = null;
+  if (!state.connected && !L) { dot.className = "dot"; txt.textContent = "กำลังเชื่อมต่อ Firebase…"; age.textContent = ""; }
+  else if (!L) { dot.className = "dot late"; txt.textContent = "รอข้อมูลจาก ESP32"; age.textContent = ""; }
+  else {
+    const sec = (serverNow() - L.ts) / 1000;
+    online = sec <= CONFIG.offlineAfterSec;
+    dot.className = "dot " + (sec <= 12 ? "live" : online ? "late" : "off");
+    txt.textContent = online ? "ESP32 ออนไลน์" : "ESP32 ออฟไลน์";
+    age.textContent = "· " + ago(sec);
+    $("dvTs").textContent = `${fHMS.format(new Date(L.ts))} (${ago(sec)})`;
+    setChip($("devChip"), online ? "good" : "critical", online ? "ออนไลน์" : "ออฟไลน์");
+  }
+  if (online !== null && state.online !== null && online !== state.online) {
+    pushEvent(online ? "good" : "critical", online ? "ESP32 กลับมาออนไลน์" : `ESP32 ขาดการติดต่อเกิน ${CONFIG.offlineAfterSec} วินาที`);
+    state.online = online; renderHealth();
+  } else if (online !== null) state.online = online;
+}
+
+// =====================================================================
+//  WIRING
+// =====================================================================
+let api, histTimer;
+function scheduleHistoryRender() { clearTimeout(histTimer); histTimer = setTimeout(() => { updateCharts(); renderHistoryDerived(); }, 120); }
+function subscribeHistory() {
+  if (state.unsubHistory) state.unsubHistory();
+  state.history = []; scheduleHistoryRender();
+  state.unsubHistory = api.history(state.rangeN, (key, v) => {
+    if (!v || typeof v !== "object") return;
+    state.history.push(normalize(key, v));
+    if (state.history.length > state.rangeN) state.history.splice(0, state.history.length - state.rangeN);
+    scheduleHistoryRender();
+  });
+}
+async function sendControl(patch) {
+  const next = { ...state.control, ...patch };
+  next.soil_low = clamp(Math.round(+next.soil_low), 10, 60);
+  next.soil_high = clamp(Math.round(+next.soil_high), 40, 90);
+  if (next.soil_high < next.soil_low + 5) { toast("เกณฑ์หยุดรดน้ำต้องมากกว่าเกณฑ์เริ่มรดน้ำอย่างน้อย 5%", true); return false; }
+  try {
+    await api.writeControl({ mode: next.mode, pump: !!next.pump, soil_low: next.soil_low, soil_high: next.soil_high });
+    state.control = next; renderControl();
+    toast("ส่งคำสั่งไปที่ /control แล้ว — อุปกรณ์จะทำตามภายใน ~10 วินาที");
+    return true;
+  } catch (e) {
+    console.error(e); toast("ส่งคำสั่งไม่สำเร็จ: ตรวจสอบ Rules ของ Firebase (.write)", true); return false;
+  }
+}
+function wireControls() {
+  document.querySelectorAll("#pumpCard .seg button").forEach((b) => b.addEventListener("click", () => {
+    if (state.control.mode === b.dataset.mode) return;
+    sendControl({ mode: b.dataset.mode, pump: false }).then((ok) => ok && pushEvent("info", `ส่งคำสั่ง: เปลี่ยนเป็นโหมด${b.dataset.mode === "manual" ? "สั่งเอง" : "อัตโนมัติ"}`));
+  }));
+  $("pumpSw").addEventListener("change", (e) => {
+    const on = e.target.checked;
+    sendControl({ pump: on }).then((ok) => { if (ok) pushEvent("info", `ส่งคำสั่ง: ${on ? "เปิด" : "ปิด"}ปั๊มน้ำ`); else e.target.checked = !on; });
+  });
+  ["loIn", "hiIn"].forEach((id) => $(id).addEventListener("input", () => { state.thDirty = true; showTh(); }));
+  $("saveTh").addEventListener("click", () => sendControl({ soil_low: +$("loIn").value, soil_high: +$("hiIn").value }).then((ok) => {
+    if (ok) { state.thDirty = false; pushEvent("info", `ส่งคำสั่ง: ตั้งเกณฑ์รดน้ำ ${$("loIn").value}% → ${$("hiIn").value}%`); }
+  }));
+  $("resetTh").addEventListener("click", () => { $("loIn").value = 35; $("hiIn").value = 70; state.thDirty = true; showTh(); });
+  $("csvBtn").addEventListener("click", exportCsv);
+  $("notifyBtn").addEventListener("click", async () => {
+    if (!("Notification" in window)) return toast("เบราว์เซอร์นี้ไม่รองรับการแจ้งเตือน", true);
+    if (!state.notify) {
+      const p = Notification.permission === "granted" ? "granted" : await Notification.requestPermission();
+      if (p !== "granted") return toast("ไม่ได้รับอนุญาตให้แจ้งเตือน", true);
+    }
+    state.notify = !state.notify;
+    $("notifyTxt").textContent = `แจ้งเตือนเมื่อวิกฤต: ${state.notify ? "เปิด" : "ปิด"}`;
+    toast(state.notify ? "จะแจ้งเตือนบนเครื่องเมื่อมีค่าวิกฤต" : "ปิดการแจ้งเตือนแล้ว");
+  });
+  $("themeBtn").addEventListener("click", () => {
+    const root = document.documentElement;
+    const dark = root.dataset.theme ? root.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+    root.dataset.theme = dark ? "light" : "dark";
+    try { localStorage.setItem("iot125-theme", root.dataset.theme); } catch {}
+    Object.values(charts).forEach((c) => { themeChart(c); c.update("none"); });
+  });
+  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => Object.values(charts).forEach((c) => { themeChart(c); c.update("none"); }));
+}
+function exportCsv() {
+  const H = state.history; if (!H.length) return toast("ยังไม่มีข้อมูลย้อนหลัง", true);
+  const cols = ["ts", "time_th", "temperature", "humidity", "soil_moisture", "light", "co2", "soil_ph", "water_level", "pump", "refill", "mode", "rssi", "uptime"];
+  const lines = [cols.join(",")];
+  for (const r of H) lines.push(cols.map((c) => c === "time_th" ? fDT.format(new Date(r.ts)).replace(/,/g, "") : r[c] ?? "").join(","));
+  const blob = new Blob(["﻿" + lines.join("\n")], { type: "text/csv;charset=utf-8" });
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
+  a.download = `${DB_NAME}-history-${new Date().toISOString().slice(0, 16).replace(/[:T]/g, "")}.csv`;
+  document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+
+async function main() {
+  try { const t = localStorage.getItem("iot125-theme"); if (t) document.documentElement.dataset.theme = t; } catch {}
+  $("dbName").textContent = DB_NAME; $("dbName2").textContent = DB_NAME; $("dbTitle").textContent = DB_NAME;
+  document.title = `Smart Farm ${DB_NAME.toUpperCase()} | Realtime Dashboard`;
+  $("jsonPath").textContent = `${CONFIG.databaseURL.replace(/^https:\/\//, "")}/${CONFIG.paths.latest}`;
+  buildKpis(); buildRanges(); wireControls(); renderEvents();
+  if (window.Chart) buildCharts(); else banner("err", "โหลดไลบรารีกราฟ (Chart.js) ไม่สำเร็จ — ตรวจสอบอินเทอร์เน็ต");
+  setInterval(tick, 1000); tick();
+  try {
+    api = DEMO ? demoApi() : await firebaseApi();
+  } catch (e) {
+    console.error(e); banner("err", "โหลด Firebase SDK ไม่สำเร็จ — ตรวจสอบการเชื่อมต่ออินเทอร์เน็ต แล้วรีเฟรชหน้า"); return;
+  }
+  if (DEMO) banner("demo", "<b>โหมดสาธิต</b> — ข้อมูลในหน้านี้จำลองในเบราว์เซอร์ ไม่ได้มาจาก ESP32 (ลบ <code>?demo=1</code> ออกจาก URL เพื่อดูข้อมูลจริง)");
+  api.offset((o) => (state.offset = o));
+  api.connected((c) => { state.connected = c; tick(); });
+  api.control((v) => { state.control = { mode: "auto", pump: false, soil_low: 35, soil_high: 70, ...(v || {}) }; state.controlLoaded = true; renderControl(); });
+  let noDataTimer = setTimeout(() => { if (!state.latest) banner("warn", `ยังไม่มีข้อมูลใน <code>/${CONFIG.paths.latest}</code> ของฐานข้อมูล <b>${DB_NAME}</b> — ตรวจสอบว่า ESP32 ต่อ Wi-Fi และส่งข้อมูลอยู่`); }, 8000);
+  api.latest((v) => {
+    if (!v || typeof v !== "object") { state.latest = null; renderJson(); return; }
+    clearTimeout(noDataTimer);
+    if ($("banner").classList.contains("warn")) banner(null);
+    const prev = state.latest;
+    state.latest = normalize("latest", v);
+    detectEvents(prev, state.latest);
+    renderKpis(); renderHealth(); renderDevice(); renderControl(); renderJson(); tick();
+  });
+  subscribeHistory();
+}
+main();
+</script>
+</body>
+</html>

@@ -1,0 +1,243 @@
+# =====================================================================
+#  IoT-125 : Smart Farm (โรงเรือนอัจฉริยะ) — ESP32 + ESPHome + Firebase RTDB
+#  - จำลองค่าเซนเซอร์ (สุ่มแบบ random-walk + รอบกลางวัน/กลางคืน)
+#  - ส่งขึ้น Firebase:  PUT /latest.json  ทุก 5 วินาที
+#                        POST /history.json ทุก 10 วินาที
+#  - อ่านคำสั่งจาก Dashboard: GET /control.json ทุก 10 วินาที (โหมด auto/manual ของปั๊มน้ำ)
+# =====================================================================
+substitutions:
+  device_name: iot-125
+  friendly: "IoT-125 Smart Farm"
+  # >>> เปลี่ยนเป็น URL ของ Realtime Database ของตัวเอง (ไม่ต้องมี / ท้าย) <<<
+  fb_url: "https://iot-125-default-rtdb.asia-southeast1.firebasedatabase.app"
+
+esphome:
+  name: ${device_name}
+  friendly_name: ${friendly}
+
+esp32:
+  board: esp32dev
+  framework:
+    type: esp-idf
+    sdkconfig_options:
+      CONFIG_ESP_WIFI_ENABLE_WPA3_SAE: n   # ช่วยให้ต่อ Hotspot มือถือได้ง่ายขึ้น
+
+logger:
+  level: INFO
+
+ota:
+  - platform: esphome
+
+# Wi-Fi อ่านจาก secrets.yaml (ต้องเป็น 2.4GHz) — ถ้าต่อไม่ได้จะเปิด Hotspot สำรอง "IoT-125-Setup"
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  reboot_timeout: 15min
+  ap:
+    ssid: "IoT-125-Setup"
+    password: "iot12345"
+
+captive_portal:
+
+improv_serial:
+
+http_request:
+  verify_ssl: false
+  timeout: 8s
+  watchdog_timeout: 20s
+
+time:
+  - platform: sntp
+    id: sntp_time
+    timezone: Asia/Bangkok
+    servers:
+      - time.google.com
+      - pool.ntp.org
+
+globals:
+  - { id: g_temp,  type: float, initial_value: '29.0' }
+  - { id: g_hum,   type: float, initial_value: '72.0' }
+  - { id: g_soil,  type: float, initial_value: '52.0' }
+  - { id: g_light, type: float, initial_value: '0.0' }
+  - { id: g_cloud, type: float, initial_value: '0.8' }
+  - { id: g_co2,   type: float, initial_value: '480.0' }
+  - { id: g_ph,    type: float, initial_value: '6.5' }
+  - { id: g_water, type: float, initial_value: '85.0' }
+  - { id: g_pump,  type: bool,  initial_value: 'false' }
+  - { id: g_refill, type: bool, initial_value: 'false' }
+  - { id: g_auto,  type: bool,  initial_value: 'true' }
+  - { id: g_manual_pump, type: bool, initial_value: 'false' }
+  - { id: g_soil_low,  type: float, initial_value: '35.0' }
+  - { id: g_soil_high, type: float, initial_value: '70.0' }
+  - { id: g_seq,   type: uint32_t, initial_value: '0' }
+  - { id: g_ok,    type: uint32_t, initial_value: '0' }
+  - { id: g_fail,  type: uint32_t, initial_value: '0' }
+  - { id: g_payload, type: std::string, initial_value: '""' }
+
+# ---------------- เซนเซอร์จำลอง (Template sensors) ----------------
+sensor:
+  - { platform: template, id: s_temp,  name: "Air Temperature", unit_of_measurement: "°C",  accuracy_decimals: 1, update_interval: never }
+  - { platform: template, id: s_hum,   name: "Air Humidity",    unit_of_measurement: "%",   accuracy_decimals: 1, update_interval: never }
+  - { platform: template, id: s_soil,  name: "Soil Moisture",   unit_of_measurement: "%",   accuracy_decimals: 1, update_interval: never }
+  - { platform: template, id: s_light, name: "Light",           unit_of_measurement: "lx",  accuracy_decimals: 0, update_interval: never }
+  - { platform: template, id: s_co2,   name: "CO2",             unit_of_measurement: "ppm", accuracy_decimals: 0, update_interval: never }
+  - { platform: template, id: s_ph,    name: "Soil pH",         unit_of_measurement: "pH",  accuracy_decimals: 2, update_interval: never }
+  - { platform: template, id: s_water, name: "Water Tank",      unit_of_measurement: "%",   accuracy_decimals: 1, update_interval: never }
+
+interval:
+  - interval: 5s
+    then:
+      # ---------- 1) จำลองค่าเซนเซอร์ + ตรรกะปั๊มน้ำอัตโนมัติ ----------
+      - lambda: |-
+          auto rnd = [](float a) -> float { return (random_float() * 2.0f - 1.0f) * a; };
+          auto clampf = [](float v, float lo, float hi) -> float { return v < lo ? lo : (v > hi ? hi : v); };
+          auto now = id(sntp_time).now();
+          float hour = now.is_valid() ? (now.hour + now.minute / 60.0f + now.second / 3600.0f)
+                                      : fmodf(9.0f + millis() / 3600000.0f, 24.0f);
+          // แสงแดด 0..1 (06:00 - 18:30)
+          float day = 0.0f;
+          if (hour > 6.0f && hour < 18.5f) day = sinf((hour - 6.0f) / 12.5f * 3.14159265f);
+
+          // อุณหภูมิ/ความชื้นอากาศ (กลางวันร้อน-แห้ง กลางคืนเย็น-ชื้น)
+          float t_target = 26.0f + 7.5f * day;
+          id(g_temp) = clampf(id(g_temp) + (t_target - id(g_temp)) * 0.08f + rnd(0.25f), 18.0f, 42.0f);
+          float h_target = 88.0f - 26.0f * day;
+          id(g_hum) = clampf(id(g_hum) + (h_target - id(g_hum)) * 0.08f + rnd(0.8f), 30.0f, 99.0f);
+
+          // แสง (lux) มีเมฆผ่านแบบสุ่ม
+          id(g_cloud) = clampf(id(g_cloud) + rnd(0.06f), 0.35f, 1.0f);
+          float l_target = day * 52000.0f * id(g_cloud) + (day > 0 ? 0.0f : 2.0f);
+          id(g_light) = clampf(id(g_light) + (l_target - id(g_light)) * 0.5f + rnd(300.0f * day), 0.0f, 100000.0f);
+
+          // CO2 (กลางวันพืชสังเคราะห์แสง -> CO2 ลดลง)
+          float c_target = 620.0f - 220.0f * day;
+          id(g_co2) = clampf(id(g_co2) + (c_target - id(g_co2)) * 0.06f + rnd(6.0f), 350.0f, 1500.0f);
+
+          // pH ดิน
+          id(g_ph) = clampf(id(g_ph) + (6.4f - id(g_ph)) * 0.02f + rnd(0.015f), 4.5f, 8.5f);
+
+          // ความชื้นดินลดลงตามการระเหย (ร้อน/แห้ง -> ลดเร็วขึ้น)
+          float evap = 0.10f + 0.22f * day + fmaxf(0.0f, id(g_temp) - 30.0f) * 0.02f + fmaxf(0.0f, 70.0f - id(g_hum)) * 0.003f;
+          id(g_soil) -= evap;
+
+          // ปั๊มน้ำ: AUTO = ดินแห้งกว่า soil_low -> เปิด, ชื้นถึง soil_high -> ปิด / MANUAL = ตามคำสั่ง
+          if (id(g_auto)) {
+            if (!id(g_pump) && id(g_soil) < id(g_soil_low)) id(g_pump) = true;
+            if (id(g_pump) && id(g_soil) >= id(g_soil_high)) id(g_pump) = false;
+          } else {
+            id(g_pump) = id(g_manual_pump);
+          }
+          if (id(g_water) < 5.0f) id(g_pump) = false;   // กันปั๊มทำงานตอนน้ำหมด (dry-run protection)
+
+          if (id(g_pump)) {
+            id(g_soil) += 1.6f + rnd(0.2f);
+            id(g_water) -= 0.6f;
+          }
+          // วาล์วลูกลอยเติมน้ำเข้าถังอัตโนมัติ: ต่ำกว่า 25% เริ่มเติม, ถึง 90% หยุด
+          if (id(g_water) < 25.0f) id(g_refill) = true;
+          if (id(g_water) >= 90.0f) id(g_refill) = false;
+          id(g_water) += id(g_refill) ? 0.5f : 0.05f;
+          id(g_soil)  = clampf(id(g_soil), 5.0f, 95.0f);
+          id(g_water) = clampf(id(g_water), 0.0f, 100.0f);
+
+          // อัปเดต template sensors
+          id(s_temp).publish_state(id(g_temp));
+          id(s_hum).publish_state(id(g_hum));
+          id(s_soil).publish_state(id(g_soil));
+          id(s_light).publish_state(id(g_light));
+          id(s_co2).publish_state(id(g_co2));
+          id(s_ph).publish_state(id(g_ph));
+          id(s_water).publish_state(id(g_water));
+
+          // ---------- 2) สร้าง JSON ----------
+          id(g_seq) += 1;
+          char tstr[24] = "";
+          if (now.is_valid()) now.strftime(tstr, sizeof(tstr), "%Y-%m-%d %H:%M:%S");
+          int rssi = wifi::global_wifi_component->is_connected() ? (int) wifi::global_wifi_component->wifi_rssi() : 0;
+          char buf[560];
+          snprintf(buf, sizeof(buf),
+            "{\"device\":\"iot-125\",\"seq\":%u,"
+            "\"temperature\":%.1f,\"humidity\":%.1f,\"soil_moisture\":%.1f,\"light\":%.0f,"
+            "\"co2\":%.0f,\"soil_ph\":%.2f,\"water_level\":%.1f,"
+            "\"pump\":%s,\"refill\":%s,\"mode\":\"%s\",\"soil_low\":%.0f,\"soil_high\":%.0f,"
+            "\"rssi\":%d,\"uptime\":%u,\"time\":\"%s\",\"ts\":{\".sv\":\"timestamp\"}}",
+            (unsigned) id(g_seq),
+            id(g_temp), id(g_hum), id(g_soil), id(g_light),
+            id(g_co2), id(g_ph), id(g_water),
+            id(g_pump) ? "true" : "false", id(g_refill) ? "true" : "false",
+            id(g_auto) ? "auto" : "manual", id(g_soil_low), id(g_soil_high),
+            rssi, (unsigned) (millis() / 1000), tstr);
+          id(g_payload) = buf;
+          ESP_LOGI("farm", "#%u T=%.1fC H=%.0f%% Soil=%.0f%% Light=%.0flx CO2=%.0f pH=%.2f Tank=%.0f%% Pump=%s(%s)",
+                   (unsigned) id(g_seq), id(g_temp), id(g_hum), id(g_soil), id(g_light), id(g_co2), id(g_ph),
+                   id(g_water), id(g_pump) ? "ON" : "OFF", id(g_auto) ? "AUTO" : "MANUAL");
+
+      # ---------- 3) ส่งขึ้น Firebase ----------
+      - if:
+          condition:
+            wifi.connected:
+          then:
+            # latest : เขียนทับทุก 5 วินาที
+            - http_request.send:
+                method: PUT
+                url: ${fb_url}/latest.json
+                request_headers:
+                  Content-Type: application/json
+                body: !lambda return id(g_payload);
+                on_response:
+                  then:
+                    - lambda: |-
+                        if (response->status_code == 200) id(g_ok) += 1; else id(g_fail) += 1;
+                        ESP_LOGI("firebase", "PUT /latest -> HTTP %d (%u ms) ok=%u fail=%u",
+                                 response->status_code, (unsigned) response->duration_ms,
+                                 (unsigned) id(g_ok), (unsigned) id(g_fail));
+                on_error:
+                  then:
+                    - lambda: |-
+                        id(g_fail) += 1;
+                        ESP_LOGW("firebase", "PUT /latest failed (fail=%u)", (unsigned) id(g_fail));
+            # history : ต่อท้าย (push key) ทุก 10 วินาที / สลับกับอ่าน control
+            - if:
+                condition:
+                  lambda: 'return id(g_seq) % 2 == 0;'
+                then:
+                  - http_request.post:
+                      url: ${fb_url}/history.json
+                      request_headers:
+                        Content-Type: application/json
+                      body: !lambda return id(g_payload);
+                      on_response:
+                        then:
+                          - lambda: |-
+                              ESP_LOGI("firebase", "POST /history -> HTTP %d (%u ms)",
+                                       response->status_code, (unsigned) response->duration_ms);
+                      on_error:
+                        then:
+                          - lambda: ESP_LOGW("firebase", "POST /history failed");
+                else:
+                  - http_request.get:
+                      url: ${fb_url}/control.json
+                      capture_response: true
+                      max_response_buffer_size: 512
+                      on_response:
+                        then:
+                          - lambda: |-
+                              if (response->status_code != 200 || body.empty() || body == "null") return;
+                              json::parse_json(body, [](JsonObject root) -> bool {
+                                const char *mode = root["mode"] | "auto";
+                                id(g_auto) = strcmp(mode, "manual") != 0;
+                                id(g_manual_pump) = root["pump"] | false;
+                                float lo = root["soil_low"] | 35.0f;
+                                float hi = root["soil_high"] | 70.0f;
+                                if (lo >= 10.0f && hi <= 90.0f && lo + 5.0f <= hi) {
+                                  id(g_soil_low) = lo;
+                                  id(g_soil_high) = hi;
+                                }
+                                return true;
+                              });
+                              ESP_LOGI("control", "mode=%s manual_pump=%s soil_low=%.0f soil_high=%.0f",
+                                       id(g_auto) ? "auto" : "manual", id(g_manual_pump) ? "ON" : "OFF",
+                                       id(g_soil_low), id(g_soil_high));
+                      on_error:
+                        then:
+                          - lambda: ESP_LOGW("control", "GET /control failed");
