@@ -717,6 +717,7 @@ function chartOptions({ unit, dec, zero, yMin, yMax }) {
       thresholds: { lines: [] },
       tooltip: {
         usePointStyle: true, padding: 10, boxPadding: 6, caretSize: 0, cornerRadius: 10, borderWidth: 1,
+        filter: (item) => item.parsed.y !== null && !isNaN(item.parsed.y),
         titleFont: { weight: "500", size: 12 }, bodyFont: { size: 13 },
         callbacks: {
           title: (items) => (items.length ? fDT.format(new Date(items[0].parsed.x)) : ""),
@@ -780,14 +781,24 @@ function buildCharts() {
   }
   Object.values(charts).forEach((c) => { themeChart(c); c.update("none"); });
 }
+// ตัดเส้นกราฟเมื่อข้อมูลขาดช่วง (เช่น อุปกรณ์ออฟไลน์/รีสตาร์ต) จะได้ไม่ลากเส้นตรงหลอกตา
+const GAP_MS = 45000;
+function series(H, get) {
+  const out = []; let prev = null;
+  for (const r of H) {
+    if (prev && r.ts - prev.ts > GAP_MS) out.push({ x: prev.ts + 1, y: null });
+    const y = get(r); out.push({ x: r.ts, y: y === null || y === undefined || !isFinite(y) ? null : y }); prev = r;
+  }
+  return out;
+}
 function updateCharts() {
   const H = state.history;
   const x0 = H.length ? H[0].ts : serverNow() - state.rangeN * CONFIG.historyStepSec * 1000;
   const x1 = H.length ? H[H.length - 1].ts : serverNow();
   const irr = charts.irr;
-  irr.data.datasets[0].data = H.map((r) => ({ x: r.ts, y: r.soil_moisture }));
-  irr.data.datasets[1].data = H.map((r) => ({ x: r.ts, y: r.water_level }));
-  irr.data.datasets[2].data = H.map((r) => ({ x: r.ts, y: r.pump ? 100 : 0 }));
+  irr.data.datasets[0].data = series(H, (r) => r.soil_moisture);
+  irr.data.datasets[1].data = series(H, (r) => r.water_level);
+  irr.data.datasets[2].data = series(H, (r) => (r.pump ? 100 : 0));
   irr.options.scales.x.min = x0; irr.options.scales.x.max = x1;
   const src = state.latest || state.control;
   const lo = Number(src.soil_low ?? 35), hi = Number(src.soil_high ?? 70);
@@ -795,7 +806,7 @@ function updateCharts() {
   irr.update("none");
   for (const key of MULTI) {
     const c = charts[key];
-    c.data.datasets[0].data = H.filter((r) => r[key] !== null).map((r) => ({ x: r.ts, y: r[key] }));
+    c.data.datasets[0].data = series(H, (r) => r[key]);
     c.options.scales.x.min = x0; c.options.scales.x.max = x1;
     c.update("none");
   }
